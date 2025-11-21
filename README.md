@@ -13,7 +13,7 @@ A bash-based command-line interface for managing virtual private servers (VPS) t
   The `s. Sign in to another account` option lets you re-authenticate with a new API key after requesting a fresh Tor identity.
 
 - **No Host Footprint**  
-  Runs completely inside Docker on macOS/Linux. Nothing is installed on the host OS; on `Ctrl+C` or `x. Exit` all containers and images created by the script are removed.
+  Runs completely inside Docker on Mac/Linux. Nothing is installed on the host OS; on `Ctrl+C` or `x. Exit` all containers and images created by the script are removed.
 
 - **Multi-Provider, Debian-Only VMs**  
   Manage Debian-based VMs on Bitlaunch and DigitalOcean from a single CLI (only Debian images are supported).
