@@ -38,6 +38,5 @@ bash -c "$(curl -sSfL --http2 --proto '=https'   'https://raw.githubusercontent.
 
 ## License
 
-This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
-You may copy, distribute and modify the software under the terms of the GPL-3.0.  
-See the [`LICENSE`](LICENSE) file for the full text of the license.
+This project is licensed under the
+[GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE).
