@@ -1,29 +1,26 @@
 #!/bin/bash
 set -Eeuo pipefail
+IFS=$'\n\t'
+umask 077
 
-# macOS locale fix for 'tr: Illegal byte sequence'
 if [[ "$OSTYPE" == "darwin"* ]]; then
     export LC_ALL=C
     export LANG=C
     export LC_CTYPE=C
 fi
 
-# Detect whether xargs supports -r (BSD/macOS doesn't). Export for guard script.
 if xargs -r </dev/null echo >/dev/null 2>&1; then xargs_r='-r'; else xargs_r=''; fi
 export xargs_r
 
-# Decide how to call docker: no sudo, sudo, or fail (macOS handled specially).
 SUDO=""
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
     echo "[info] macOS detected."
-    # docker CLI present?
     if ! command -v docker >/dev/null 2>&1; then
         echo "[error] Docker is not installed."
         echo "[hint] Install Docker Desktop, launch it, then re-run this script."
         exit 1
     fi
-    # If DOCKER_HOST points to a missing socket, tell the user once and exit
     if [[ -n "${DOCKER_HOST:-}" && "${DOCKER_HOST}" == unix://* ]]; then
         sock="${DOCKER_HOST#unix://}"
         if [[ ! -S "$sock" ]]; then
@@ -32,18 +29,16 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
             exit 1
         fi
     fi
-    # Ping daemon. If not running — provide a clear instruction and exit.
+
     if ! docker info >/dev/null 2>&1; then
         echo "[error] Docker is installed but not running."
         echo "[hint] Open 'Docker.app' and wait until the whale icon stops animating, then re-run this script."
         echo "[hint] If you use custom contexts, try:  unset DOCKER_HOST ; docker context use default"
         exit 1
     fi
-    # On macOS we never use sudo for docker
     SUDO=""
     echo "[ok] Docker Desktop is running."
 else
-    # Linux / other Unix
     if docker ps >/dev/null 2>&1; then
         SUDO=""
         echo "[info] docker is usable without sudo."
@@ -71,12 +66,9 @@ else
 fi
 
 export SUDO
-export sudo_cmd="$SUDO"   # passed into the guard script environment
-
-# ---------- FUNCTIONS I ADDED (FIXED) ----------
+export sudo_cmd="$SUDO" 
 
 sudo_keepalive_start() {
-    # Keep sudo ticket warm only when we actually use sudo (Linux).
     local max_minutes="${1:-60}"
     [[ "${SUDO:-}" != "sudo" ]] && return 0
     sudo -v || exit 1
@@ -89,13 +81,11 @@ sudo_keepalive_start() {
         done
     ) & SUDO_KEEPALIVE_PID=$!
 }
-
 sudo_keepalive_stop() {
     [[ -n "${SUDO_KEEPALIVE_PID:-}" ]] && kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
     unset SUDO_KEEPALIVE_PID
     [[ "${SUDO:-}" == "sudo" ]] && sudo -K 2>/dev/null || true
 }
-
 __compose() {
     if ${SUDO} docker compose version >/dev/null 2>&1; then
         ${SUDO} docker compose "$@"
@@ -106,22 +96,16 @@ __compose() {
         return 1
     fi
 }
-
-# Remove ALL builder caches across classic builder and every buildx builder
 prune_build_caches() {
-    # Classic builder cache (BuildKit via 'docker builder')
     ${SUDO} docker builder prune -af >/dev/null 2>&1 || true
-    # Buildx builders — iterate all and prune with --all
     if ${SUDO} docker buildx ls >/dev/null 2>&1; then
         if ${SUDO} docker buildx ls --format '{{.Name}}' >/dev/null 2>&1; then
-            # Newer Docker: use --format
             while IFS= read -r bname; do
                 [[ -z "$bname" ]] && continue
-                bname="${bname%\*}"  # strip trailing asterisk if present
+                bname="${bname%\*}"
                 ${SUDO} docker buildx prune --builder "$bname" -af >/dev/null 2>&1 || true
             done < <(${SUDO} docker buildx ls --format '{{.Name}}')
         else
-            # Fallback: parse tabular output
             while IFS= read -r bname; do
                 [[ -z "$bname" ]] && continue
                 bname="${bname%\*}"
@@ -130,9 +114,8 @@ prune_build_caches() {
         fi
     fi
 }
-
 preclean_patterns() {
-    for name in exit_a exit_b haproxy bit; do
+    for name in exit_a exit_b haproxy deploy; do
         ${SUDO} docker ps -aq -f "name=^${name}$" | xargs $xargs_r ${SUDO} docker rm -f >/dev/null 2>&1 || true
     done
     ${SUDO} docker network ls -q | while read -r nid; do
@@ -143,13 +126,12 @@ preclean_patterns() {
     done
     prune_build_caches
 }
-
 cleanup_project() {
     local proj="$1" yml="$2"
     if [[ -f "$yml" ]]; then
         __compose -p "$proj" -f "$yml" down --rmi local --volumes --remove-orphans >/dev/null 2>&1 || true
     fi
-    for name in exit_a exit_b haproxy bit; do
+    for name in exit_a exit_b haproxy deploy; do
         ${SUDO} docker ps -aq -f "name=^${name}$" | xargs $xargs_r ${SUDO} docker rm -f >/dev/null 2>&1 || true
     done
     ${SUDO} docker network ls -q --filter "label=com.docker.compose.project=${proj}" | xargs $xargs_r ${SUDO} docker network rm >/dev/null 2>&1 || true
@@ -158,7 +140,6 @@ cleanup_project() {
         ${SUDO} docker rmi -f debian:trixie-slim >/dev/null 2>&1 || true
     fi
 }
-
 start_session_guard() {
     local proj="$1"
     local yml="$2"
@@ -179,56 +160,45 @@ done
 if [[ -f "$yml" ]]; then
     ${sudo_cmd:-} docker compose -p "$proj" -f "$yml" down --rmi local --volumes --remove-orphans >/dev/null 2>&1 || true
 fi
-for name in exit_a exit_b haproxy bit; do
+for name in exit_a exit_b haproxy deploy; do
     ${sudo_cmd:-} docker ps -aq -f "name=^${name}$" | xargs ${xargs_r:-} ${sudo_cmd:-} docker rm -f >/dev/null 2>&1 || true
 done
 ${sudo_cmd:-} docker network ls -q --filter "label=com.docker.compose.project=${proj}" | xargs ${xargs_r:-} ${sudo_cmd:-} docker network rm >/dev/null 2>&1 || true
 ${sudo_cmd:-} docker volume ls -q --filter "label=com.docker.compose.project=${proj}" | xargs ${xargs_r:-} ${sudo_cmd:-} docker volume rm -f >/dev/null 2>&1 || true
 EOS
     chmod +x "$guard"
-    # Ensure env vars are propagated into the guard process.
     ( export sudo_cmd="${SUDO}"; export xargs_r="$xargs_r"; nohup bash "$guard" "$proj" "$yml" "$parent" "$tty" >/dev/null 2>&1 & )
     guard_pid=$!
 }
-
 stop_session_guard() {
     [[ -n "${guard_pid:-}" ]] && kill "$guard_pid" 2>/dev/null || true
     unset guard_pid
 }
-
 cleanup_all() {
     set +e
     stop_session_guard
     cleanup_project "${rnd_proj_name}" "${tmp_folder}/${rnd_proj_name}/docker-compose.yaml"
     rm -rf -- "${tmp_folder}" 2>/dev/null || true
 
-    # Extra safety: ensure build caches are gone (only if Docker is reachable)
     if ${SUDO} docker info >/dev/null 2>&1; then
         prune_build_caches
 
-        # If you REALLY want to wipe unrelated user stuff too, opt-in via env:
-        # STRICT_CLEANUP=1 ./test.sh
         if [[ "${STRICT_CLEANUP:-0}" == "1" ]]; then
             echo "[warn] Performing system-wide prune (--all --volumes)."
             ${SUDO} docker system prune -af --volumes >/dev/null 2>&1 || true
         fi
     fi
 
-    # Drop sudo ticket last
     sudo_keepalive_stop
 }
-
-# check docker on macOS / Debian / Arch and enable non-sudo usage / start daemon if needed
 check_pkg() {
     local os=""
 
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        # By the time we are here, the top-of-file macOS checks already enforced Docker Desktop running.
         echo "[ok] Docker on macOS is ready."
         return 0
     fi
 
-    # Linux
     if [[ -f /etc/os-release ]]; then
         . /etc/os-release
         os="$ID"
@@ -266,56 +236,38 @@ check_pkg() {
         sudo systemctl enable --now docker 2>/dev/null || true
     fi
 }
-
-print_envs_from_container() {
-    ${SUDO} docker run --rm debian:trixie-slim bash -ceu '
-        ext_network_container_subnet_cidr_ipv4="10.16.85.0/29"
-        ext_base=${ext_network_container_subnet_cidr_ipv4%/*}; ext_base=${ext_base%.*}.
-        ext_network_container_gateway_ipv4="${ext_base}1"
-        ext_network_container_exit_a_ipv4="${ext_base}2"
-        ext_network_container_exit_b_ipv4="${ext_base}3"
-
-        int_network_container_subnet_cidr_ipv4="172.16.85.0/29"
-        int_base=${int_network_container_subnet_cidr_ipv4%/*}; int_base=${int_base%.*}.
-        int_network_container_gateway_ipv4="${int_base}1"
-        int_network_container_exit_a_ipv4="${int_base}2"
-        int_network_container_exit_b_ipv4="${int_base}3"
-        int_network_container_haproxy_ipv4="${int_base}4"
-        int_network_container_txt_ipv4="${int_base}5"
-
-        for v in \
-            ext_network_container_subnet_cidr_ipv4 ext_network_container_gateway_ipv4 \
-            ext_network_container_exit_a_ipv4 ext_network_container_exit_b_ipv4 \
-            int_network_container_subnet_cidr_ipv4 int_network_container_gateway_ipv4 \
-            int_network_container_exit_a_ipv4 int_network_container_exit_b_ipv4 \
-            int_network_container_haproxy_ipv4 int_network_container_txt_ipv4
-        do
-            eval val=\$$v
-            printf "%s=%s\n" "$v" "$val"
-        done
-    '
-}
-
 run_build_proxy() {
-    while IFS='=' read -r key value; do
-        if [[ -z "${key:-}" ]]; then
-            continue
-        fi
-        printf -v "$key" '%s' "$value"
-        export "$key"
-    done < <(print_envs_from_container)
-    mkdir -p "${tmp_folder}/${rnd_proj_name}"/{exit_a,exit_b,haproxy,bit}
+    ext_network_container_subnet_cidr_ipv4="10.16.85.0/29"
+    ext_base=${ext_network_container_subnet_cidr_ipv4%/*}; ext_base=${ext_base%.*}.
+    ext_network_container_gateway_ipv4="${ext_base}1"
+    ext_network_container_exit_a_ipv4="${ext_base}2"
+    ext_network_container_exit_b_ipv4="${ext_base}3"
+    
+    int_network_container_subnet_cidr_ipv4="172.16.85.0/29"
+    int_base=${int_network_container_subnet_cidr_ipv4%/*}; int_base=${int_base%.*}.
+    int_network_container_gateway_ipv4="${int_base}1"
+    int_network_container_exit_a_ipv4="${int_base}2"
+    int_network_container_exit_b_ipv4="${int_base}3"
+    int_network_container_haproxy_ipv4="${int_base}4"
+    int_network_container_deploy_ipv4="${int_base}5"
+    mkdir -p "${tmp_folder}/${rnd_proj_name}"/{exit_a,exit_b,haproxy,deploy}
 
 cat <<EOF> "${tmp_folder}/${rnd_proj_name}/.env"
+int_network_container_subnet_cidr_ipv4="$int_network_container_subnet_cidr_ipv4"
+int_network_container_gateway_ipv4="$int_network_container_gateway_ipv4"
 int_network_container_haproxy_ipv4="${int_network_container_haproxy_ipv4}"
 int_network_container_exit_a_ipv4="${int_network_container_exit_a_ipv4}"
 int_network_container_exit_b_ipv4="${int_network_container_exit_b_ipv4}"
-int_network_container_txt_ipv4="${int_network_container_txt_ipv4}"
+int_network_container_deploy_ipv4="${int_network_container_deploy_ipv4}"
+ext_network_container_subnet_cidr_ipv4="$ext_network_container_subnet_cidr_ipv4"
+ext_network_container_gateway_ipv4="$ext_network_container_gateway_ipv4"
+ext_network_container_exit_a_ipv4="$ext_network_container_exit_a_ipv4"
+ext_network_container_exit_b_ipv4="$ext_network_container_exit_b_ipv4"
 tor_ctrl_pass="${tor_ctrl_pass}"
 tor_ctrl_hash="${tor_ctrl_hash}"
 EOF
 
-cat <<EOF> "${tmp_folder}/${rnd_proj_name}/docker-compose.yaml"
+cat <<'EOF'> "${tmp_folder}/${rnd_proj_name}/docker-compose.yaml"
 services:
   exit_a:
     container_name: exit_a
@@ -323,9 +275,9 @@ services:
       context: ./exit_a
       dockerfile: Dockerfile
       args:
-        int_network_container_exit_a_ipv4: "\${int_network_container_exit_a_ipv4}"
-        tor_ctrl_pass: "\${tor_ctrl_pass}"
-        tor_ctrl_hash: "\${tor_ctrl_hash}"
+        int_network_container_exit_a_ipv4: "${int_network_container_exit_a_ipv4}"
+        tor_ctrl_pass: "${tor_ctrl_pass}"
+        tor_ctrl_hash: "${tor_ctrl_hash}"
     runtime: runc
     security_opt:
       - no-new-privileges:true
@@ -348,9 +300,9 @@ services:
       context: ./exit_b
       dockerfile: Dockerfile
       args:
-        int_network_container_exit_b_ipv4: "\${int_network_container_exit_b_ipv4}"
-        tor_ctrl_pass: "\${tor_ctrl_pass}"
-        tor_ctrl_hash: "\${tor_ctrl_hash}"
+        int_network_container_exit_b_ipv4: "${int_network_container_exit_b_ipv4}"
+        tor_ctrl_pass: "${tor_ctrl_pass}"
+        tor_ctrl_hash: "${tor_ctrl_hash}"
     runtime: runc
     security_opt:
       - no-new-privileges:true
@@ -373,10 +325,10 @@ services:
       context: ./haproxy
       dockerfile: Dockerfile
       args:
-        int_network_container_haproxy_ipv4: "\${int_network_container_haproxy_ipv4}"
-        int_network_container_exit_a_ipv4: "\${int_network_container_exit_a_ipv4}"
-        int_network_container_exit_b_ipv4: "\${int_network_container_exit_b_ipv4}"
-        tor_ctrl_pass: "\${tor_ctrl_pass}"
+        int_network_container_haproxy_ipv4: "${int_network_container_haproxy_ipv4}"
+        int_network_container_exit_a_ipv4: "${int_network_container_exit_a_ipv4}"
+        int_network_container_exit_b_ipv4: "${int_network_container_exit_b_ipv4}"
+        tor_ctrl_pass: "${tor_ctrl_pass}"
     runtime: runc
     security_opt:
       - no-new-privileges:true
@@ -388,16 +340,16 @@ services:
       internal_network:
         ipv4_address: ${int_network_container_haproxy_ipv4}
 
-  bit:
-    container_name: bit
+  deploy:
+    container_name: deploy
     build:
-      context: ./bit
+      context: ./deploy
       dockerfile: Dockerfile
       args:
-        int_network_container_haproxy_ipv4: "\${int_network_container_haproxy_ipv4}"
-        int_network_container_exit_a_ipv4: "\${int_network_container_exit_a_ipv4}"
-        int_network_container_exit_b_ipv4: "\${int_network_container_exit_b_ipv4}"
-        tor_ctrl_pass: "\${tor_ctrl_pass}"
+        int_network_container_haproxy_ipv4: "${int_network_container_haproxy_ipv4}"
+        int_network_container_exit_a_ipv4: "${int_network_container_exit_a_ipv4}"
+        int_network_container_exit_b_ipv4: "${int_network_container_exit_b_ipv4}"
+        tor_ctrl_pass: "${tor_ctrl_pass}"
     runtime: runc
     user: "1000:1000"
     security_opt:
@@ -405,7 +357,7 @@ services:
     restart: unless-stopped
     networks:
       internal_network:
-        ipv4_address: ${int_network_container_txt_ipv4}
+        ipv4_address: ${int_network_container_deploy_ipv4}
 
 networks:
   external_network:
@@ -2373,6 +2325,7 @@ rnd_proj_name="bitstack_$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 8 || 
 sudo_keepalive_start 90
 trap 'cleanup_all; exit 130' INT
 trap 'cleanup_all' EXIT TERM HUP QUIT
+
 preclean_patterns
 check_pkg
 tor_ctrl_pass="$(LC_ALL=C tr -dc 'A-Za-z0-9!?+=_' </dev/urandom | head -c 32 || true)"
