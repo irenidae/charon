@@ -1,4 +1,23 @@
-# Bitlaunch VPS Management CLI
+# charon
+
+A collection of independent bash-based CLIs for working with various hosting providers and registrars
+via their APIs, with a focus on privacy, Tor routing, and cryptocurrency payments.
+
+Each script:
+- is fully self-contained (does not depend on other files in this repo),
+- can be launched directly via `bash -c "$(curl ...)"`,
+- is documented in its own section below.
+
+---
+
+### Scripts
+
+- [bitlaunch.sh](#bitlaunch-vps-management-cli)
+
+_(More scripts coming soon.)_
+
+
+## Bitlaunch VPS Management CLI
 
 A bash-based command-line interface for managing virtual private servers (VPS) through the Bitlaunch API with cryptocurrency payments, strong privacy, and a fully isolated Docker runtime.
 
