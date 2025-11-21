@@ -8,7 +8,6 @@ Each script:
 - can be launched directly via `bash -c "$(curl ...)"`,
 - is documented in its own section below.
 
----
 
 ### Scripts
 
@@ -21,9 +20,8 @@ _(More scripts coming soon.)_
 
 A bash-based command-line interface for managing virtual private servers (VPS) through the Bitlaunch API with cryptocurrency payments, strong privacy, and a fully isolated Docker runtime.
 
----
 
-## Key Features
+## Features
 
 - **Privacy & Anonymity**  
   All API calls go through Tor, so your real IP is hidden from providers and intermediaries. API keys and credentials live only inside the container.
@@ -45,7 +43,6 @@ A bash-based command-line interface for managing virtual private servers (VPS) t
 
 - **Simple Text UI**  
   Minimalistic TUI with separate *Main*, *Server*, and *Transactions* menus, suitable for SSH and low-bandwidth environments.
----
 
 
 ## Usage
@@ -53,7 +50,14 @@ A bash-based command-line interface for managing virtual private servers (VPS) t
 ```bash
 bash -c "$(curl -sSfL --http2 --proto '=https'   'https://raw.githubusercontent.com/irenidae/charon/refs/heads/main/bitlaunch.sh')"
 ```
----
+
+## Support
+
+If this project is useful to you, consider supporting its development:
+
+- XMR `49nS2i9pTLVYbqv5tUaCGCNSeHQLQkB92QbhbArm14CE77EBf4ewBmPhwuPRfZcJ6GW91Exa399uyLMQXCHZ8S4VNWYmjoN`
+
+Donations are optional but highly appreciated.
 
 ## License
 
