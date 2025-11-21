@@ -55,7 +55,7 @@ bash -c "$(curl -sSfL --http2 --proto '=https'   'https://raw.githubusercontent.
 
 If this project is useful to you, consider supporting its development:
 
-- XMR `49nS2i9pTLVYbqv5tUaCGCNSeHQLQkB92QbhbArm14CE77EBf4ewBmPhwuPRfZcJ6GW91Exa399uyLMQXCHZ8S4VNWYmjoN`
+XMR: `49nS2i9pTLVYbqv5tUaCGCNSeHQLQkB92QbhbArm14CE77EBf4ewBmPhwuPRfZcJ6GW91Exa399uyLMQXCHZ8S4VNWYmjoN`
 
 Donations are optional but highly appreciated.
 
