@@ -1,4 +1,4 @@
-# charon
+# Charon
 
 A collection of independent bash-based CLIs for working with various hosting providers and registrars
 via their APIs, with a focus on privacy, Tor routing, and cryptocurrency payments.
