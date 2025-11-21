@@ -115,7 +115,7 @@ prune_build_caches() {
     fi
 }
 preclean_patterns() {
-    for name in exit_a exit_b haproxy deploy; do
+    for name in exit_a exit_b haproxy bit; do
         ${SUDO} docker ps -aq -f "name=^${name}$" | xargs $xargs_r ${SUDO} docker rm -f >/dev/null 2>&1 || true
     done
     ${SUDO} docker network ls -q | while read -r nid; do
@@ -131,7 +131,7 @@ cleanup_project() {
     if [[ -f "$yml" ]]; then
         __compose -p "$proj" -f "$yml" down --rmi local --volumes --remove-orphans >/dev/null 2>&1 || true
     fi
-    for name in exit_a exit_b haproxy deploy; do
+    for name in exit_a exit_b haproxy bit; do
         ${SUDO} docker ps -aq -f "name=^${name}$" | xargs $xargs_r ${SUDO} docker rm -f >/dev/null 2>&1 || true
     done
     ${SUDO} docker network ls -q --filter "label=com.docker.compose.project=${proj}" | xargs $xargs_r ${SUDO} docker network rm >/dev/null 2>&1 || true
@@ -160,7 +160,7 @@ done
 if [[ -f "$yml" ]]; then
     ${sudo_cmd:-} docker compose -p "$proj" -f "$yml" down --rmi local --volumes --remove-orphans >/dev/null 2>&1 || true
 fi
-for name in exit_a exit_b haproxy deploy; do
+for name in exit_a exit_b haproxy bit; do
     ${sudo_cmd:-} docker ps -aq -f "name=^${name}$" | xargs ${xargs_r:-} ${sudo_cmd:-} docker rm -f >/dev/null 2>&1 || true
 done
 ${sudo_cmd:-} docker network ls -q --filter "label=com.docker.compose.project=${proj}" | xargs ${xargs_r:-} ${sudo_cmd:-} docker network rm >/dev/null 2>&1 || true
@@ -249,8 +249,8 @@ run_build_proxy() {
     int_network_container_exit_a_ipv4="${int_base}2"
     int_network_container_exit_b_ipv4="${int_base}3"
     int_network_container_haproxy_ipv4="${int_base}4"
-    int_network_container_deploy_ipv4="${int_base}5"
-    mkdir -p "${tmp_folder}/${rnd_proj_name}"/{exit_a,exit_b,haproxy,deploy}
+    int_network_container_bit_ipv4="${int_base}5"
+    mkdir -p "${tmp_folder}/${rnd_proj_name}"/{exit_a,exit_b,haproxy,bit}
 
 cat <<EOF> "${tmp_folder}/${rnd_proj_name}/.env"
 int_network_container_subnet_cidr_ipv4="$int_network_container_subnet_cidr_ipv4"
@@ -258,7 +258,7 @@ int_network_container_gateway_ipv4="$int_network_container_gateway_ipv4"
 int_network_container_haproxy_ipv4="${int_network_container_haproxy_ipv4}"
 int_network_container_exit_a_ipv4="${int_network_container_exit_a_ipv4}"
 int_network_container_exit_b_ipv4="${int_network_container_exit_b_ipv4}"
-int_network_container_deploy_ipv4="${int_network_container_deploy_ipv4}"
+int_network_container_bit_ipv4="${int_network_container_bit_ipv4}"
 ext_network_container_subnet_cidr_ipv4="$ext_network_container_subnet_cidr_ipv4"
 ext_network_container_gateway_ipv4="$ext_network_container_gateway_ipv4"
 ext_network_container_exit_a_ipv4="$ext_network_container_exit_a_ipv4"
@@ -340,10 +340,10 @@ services:
       internal_network:
         ipv4_address: ${int_network_container_haproxy_ipv4}
 
-  deploy:
-    container_name: deploy
+  bit:
+    container_name: bit
     build:
-      context: ./deploy
+      context: ./bit
       dockerfile: Dockerfile
       args:
         int_network_container_haproxy_ipv4: "${int_network_container_haproxy_ipv4}"
@@ -357,7 +357,7 @@ services:
     restart: unless-stopped
     networks:
       internal_network:
-        ipv4_address: ${int_network_container_deploy_ipv4}
+        ipv4_address: ${int_network_container_bit_ipv4}
 
 networks:
   external_network:
