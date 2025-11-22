@@ -3,6 +3,11 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 umask 077
 
+if [[ "$OSTYPE" != "darwin"* ]]; then
+    [ -f "$HOME/.zsh_history" ] && : > "$HOME/.zsh_history" || true
+    [ -f "$HOME/.bash_history" ] && : > "$HOME/.bash_history" || true
+fi
+
 if [[ "$OSTYPE" == "darwin"* ]]; then
     export LC_ALL=C
     export LANG=C
@@ -139,15 +144,20 @@ prune_build_caches() {
     fi
 }
 preclean_patterns() {
-    for name in exit_a exit_b haproxy bitlaunch; do
+    for name in exit_a exit_b haproxy support; do
         ${SUDO} docker ps -aq -f "name=^${name}$" | xargs ${xargs_r} ${SUDO} docker rm -f >/dev/null 2>&1 || true
     done
-
+    local nets=()
+    [[ -n "${ext_network_container_subnet_cidr_ipv4:-}" ]] && nets+=( "$ext_network_container_subnet_cidr_ipv4" )
+    [[ -n "${int_network_container_subnet_cidr_ipv4:-}" ]] && nets+=( "$int_network_container_subnet_cidr_ipv4" )
     ${SUDO} docker network ls -q | while read -r nid; do
         subnets=$(${SUDO} docker network inspect "$nid" --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}' 2>/dev/null || true)
-        if echo "$subnets" | grep -qE '\b(10\.16\.85\.0/29|172\.16\.85\.0/29)\b'; then
-            ${SUDO} docker network rm "$nid" >/dev/null 2>&1 || true
-        fi
+        for net in "${nets[@]}"; do
+            if echo "$subnets" | grep -qw -- "$net"; then
+                ${SUDO} docker network rm "$nid" >/dev/null 2>&1 || true
+                break
+            fi
+        done
     done
     prune_build_caches
 }
@@ -332,22 +342,6 @@ check_pkg() {
     fi
 }
 run_build_proxy() {
-    ext_network_container_subnet_cidr_ipv4="10.16.85.0/29"
-    ext_base=${ext_network_container_subnet_cidr_ipv4%/*}
-    ext_base=${ext_base%.*}.
-    ext_network_container_gateway_ipv4="${ext_base}1"
-    ext_network_container_exit_a_ipv4="${ext_base}2"
-    ext_network_container_exit_b_ipv4="${ext_base}3"
-
-    int_network_container_subnet_cidr_ipv4="172.16.85.0/29"
-    int_base=${int_network_container_subnet_cidr_ipv4%/*}
-    int_base=${int_base%.*}.
-    int_network_container_gateway_ipv4="${int_base}1"
-    int_network_container_exit_a_ipv4="${int_base}2"
-    int_network_container_exit_b_ipv4="${int_base}3"
-    int_network_container_haproxy_ipv4="${int_base}4"
-    int_network_container_bitlaunch_ipv4="${int_base}5"
-
     local proj_dir="${tmp_folder}/${rnd_proj_name}"
     mkdir -p "${tmp_folder}/${rnd_proj_name}"/{exit_a,exit_b,haproxy,bitlaunch}
 
@@ -2453,6 +2447,22 @@ wait_stack_ready() {
     fi
     info "All proxy containers are healthy."
 }
+
+ext_network_container_subnet_cidr_ipv4="10.16.85.0/29"
+ext_base=${ext_network_container_subnet_cidr_ipv4%/*}
+ext_base=${ext_base%.*}.
+ext_network_container_gateway_ipv4="${ext_base}1"
+ext_network_container_exit_a_ipv4="${ext_base}2"
+ext_network_container_exit_b_ipv4="${ext_base}3"
+int_network_container_subnet_cidr_ipv4="172.16.85.0/29"
+int_base=${int_network_container_subnet_cidr_ipv4%/*}
+int_base=${int_base%.*}.
+int_network_container_gateway_ipv4="${int_base}1"
+int_network_container_exit_a_ipv4="${int_base}2"
+int_network_container_exit_b_ipv4="${int_base}3"
+int_network_container_haproxy_ipv4="${int_base}4"
+int_network_container_bitlaunch_ipv4="${int_base}5"
+
 tmp_folder="$(mktemp -d -t bitlaunchstack.XXXXXXXX)"
 append_tmp_dir "$tmp_folder"
 rnd_proj_name="bitlaunchstack_$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 8 || true)"
