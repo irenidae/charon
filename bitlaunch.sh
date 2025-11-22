@@ -9,68 +9,87 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     export LC_CTYPE=C
 fi
 
-if xargs -r </dev/null echo >/dev/null 2>&1; then xargs_r='-r'; else xargs_r=''; fi
+info() { printf "[info] %s\n" "$*"; }
+warn() { printf "[warn] %s\n" "$*"; }
+err() { printf "[error] %s\n" "$*" >&2; }
+die() { err "$*"; exit 1; }
+clear_scr() { clear 2>/dev/null || true; printf '\e[3J' 2>/dev/null || true; }
+
+if xargs -r </dev/null echo >/dev/null 2>&1; then
+    xargs_r='-r'
+else
+    xargs_r=''
+fi
 export xargs_r
 
 SUDO=""
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    echo "[info] macOS detected."
+    info "macOS detected."
     if ! command -v docker >/dev/null 2>&1; then
-        echo "[error] Docker is not installed."
-        echo "[hint] Install Docker Desktop, launch it, then re-run this script."
+        err "Docker is not installed."
+        info "hint: Install Docker Desktop, launch it, then re-run this script."
         exit 1
     fi
+
     if [[ -n "${DOCKER_HOST:-}" && "${DOCKER_HOST}" == unix://* ]]; then
         sock="${DOCKER_HOST#unix://}"
         if [[ ! -S "$sock" ]]; then
-            echo "[error] DOCKER_HOST points to '$sock', but that socket does not exist."
-            echo "[hint] Start Docker Desktop, or run:  unset DOCKER_HOST ; docker context use default"
+            err  "DOCKER_HOST points to '$sock', but that socket does not exist."
+            info "hint: Start Docker Desktop, or run: unset DOCKER_HOST ; docker context use default"
             exit 1
         fi
     fi
 
     if ! docker info >/dev/null 2>&1; then
-        echo "[error] Docker is installed but not running."
-        echo "[hint] Open 'Docker.app' and wait until the whale icon stops animating, then re-run this script."
-        echo "[hint] If you use custom contexts, try:  unset DOCKER_HOST ; docker context use default"
+        err  "Docker is installed but not running."
+        info "hint: Open 'Docker.app' and wait until the whale icon stops animating, then re-run this script."
+        info "hint: If you use custom contexts, try: unset DOCKER_HOST ; docker context use default"
         exit 1
     fi
+
     SUDO=""
-    echo "[ok] Docker Desktop is running."
+    info "Docker Desktop is running."
 else
     if docker ps >/dev/null 2>&1; then
         SUDO=""
-        echo "[info] docker is usable without sudo."
+        info "docker is usable without sudo."
     else
         if command -v sudo >/dev/null 2>&1; then
             if sudo -n true 2>/dev/null; then
                 SUDO="sudo"
-                echo "[info] using passwordless sudo for docker."
+                info "using passwordless sudo for docker."
             else
                 if [[ -t 0 && -t 1 ]]; then
-                    echo "[info] asking for sudo password to use docker…"
-                    sudo -v || { echo "[error] sudo authentication failed."; exit 1; }
+                    info "asking for sudo password to use docker…"
+                    sudo -v || { err "sudo authentication failed."; exit 1; }
                     SUDO="sudo"
                 else
-                    echo "[error] docker requires sudo but no TTY is available to prompt for password."
-                    echo "[hint] add your user to the docker group or enable passwordless sudo for docker."
+                    err  "docker requires sudo but no TTY is available to prompt for password."
+                    info "hint: add your user to the docker group or enable passwordless sudo for docker."
                     exit 1
                 fi
             fi
         else
-            echo "[error] docker is not accessible and sudo is not installed."
+            err "docker is not accessible and sudo is not installed."
             exit 1
         fi
     fi
 fi
 
 export SUDO
-export sudo_cmd="$SUDO" 
+declare -a _tmp_files=()
+declare -a _tmp_dirs=()
+declare -a _tmp_images=()
+append_tmp_file() { _tmp_files+=("$1"); }
+append_tmp_dir() { _tmp_dirs+=("$1"); }
+append_tmp_image() { _tmp_images+=("$1"); }
 
 sudo_keepalive_start() {
     local max_minutes="${1:-60}"
+
     [[ "${SUDO:-}" != "sudo" ]] && return 0
+
     sudo -v || exit 1
     (
         local end=$((SECONDS + max_minutes*60))
@@ -82,9 +101,13 @@ sudo_keepalive_start() {
     ) & SUDO_KEEPALIVE_PID=$!
 }
 sudo_keepalive_stop() {
-    [[ -n "${SUDO_KEEPALIVE_PID:-}" ]] && kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
-    unset SUDO_KEEPALIVE_PID
-    [[ "${SUDO:-}" == "sudo" ]] && sudo -K 2>/dev/null || true
+    if [[ -n "${SUDO_KEEPALIVE_PID:-}" ]]; then
+        kill "$SUDO_KEEPALIVE_PID" 2>/dev/null || true
+        unset SUDO_KEEPALIVE_PID
+    fi
+    if [[ "${SUDO:-}" == "sudo" ]]; then
+        sudo -K 2>/dev/null || true
+    fi
 }
 __compose() {
     if ${SUDO} docker compose version >/dev/null 2>&1; then
@@ -92,12 +115,13 @@ __compose() {
     elif command -v docker-compose >/dev/null 2>&1; then
         ${SUDO} docker-compose "$@"
     else
-        echo "[error] docker compose is not available."
+        err "docker compose is not available."
         return 1
     fi
 }
 prune_build_caches() {
     ${SUDO} docker builder prune -af >/dev/null 2>&1 || true
+
     if ${SUDO} docker buildx ls >/dev/null 2>&1; then
         if ${SUDO} docker buildx ls --format '{{.Name}}' >/dev/null 2>&1; then
             while IFS= read -r bname; do
@@ -115,9 +139,10 @@ prune_build_caches() {
     fi
 }
 preclean_patterns() {
-    for name in exit_a exit_b haproxy bit; do
-        ${SUDO} docker ps -aq -f "name=^${name}$" | xargs $xargs_r ${SUDO} docker rm -f >/dev/null 2>&1 || true
+    for name in exit_a exit_b haproxy bitlaunch; do
+        ${SUDO} docker ps -aq -f "name=^${name}$" | xargs ${xargs_r} ${SUDO} docker rm -f >/dev/null 2>&1 || true
     done
+
     ${SUDO} docker network ls -q | while read -r nid; do
         subnets=$(${SUDO} docker network inspect "$nid" --format '{{range .IPAM.Config}}{{.Subnet}} {{end}}' 2>/dev/null || true)
         if echo "$subnets" | grep -qE '\b(10\.16\.85\.0/29|172\.16\.85\.0/29)\b'; then
@@ -127,75 +152,145 @@ preclean_patterns() {
     prune_build_caches
 }
 cleanup_project() {
-    local proj="$1" yml="$2"
+    local proj="$1"
+    local yml="$2"
+
     if [[ -f "$yml" ]]; then
         __compose -p "$proj" -f "$yml" down --rmi local --volumes --remove-orphans >/dev/null 2>&1 || true
     fi
-    for name in exit_a exit_b haproxy bit; do
-        ${SUDO} docker ps -aq -f "name=^${name}$" | xargs $xargs_r ${SUDO} docker rm -f >/dev/null 2>&1 || true
+
+    for name in exit_a exit_b haproxy bitlaunch; do
+        ${SUDO} docker ps -aq -f "name=^${name}$" | xargs ${xargs_r} ${SUDO} docker rm -f >/dev/null 2>&1 || true
     done
-    ${SUDO} docker network ls -q --filter "label=com.docker.compose.project=${proj}" | xargs $xargs_r ${SUDO} docker network rm >/dev/null 2>&1 || true
-    ${SUDO} docker volume ls -q --filter "label=com.docker.compose.project=${proj}" | xargs $xargs_r ${SUDO} docker volume rm -f >/dev/null 2>&1 || true
+
+    ${SUDO} docker network ls -q --filter "label=com.docker.compose.project=${proj}" | xargs ${xargs_r} ${SUDO} docker network rm >/dev/null 2>&1 || true
+    ${SUDO} docker volume ls -q --filter "label=com.docker.compose.project=${proj}" | xargs ${xargs_r} ${SUDO} docker volume rm -f >/dev/null 2>&1 || true
     if [[ -z "$(${SUDO} docker ps -aq --filter ancestor=debian:trixie-slim 2>/dev/null)" ]]; then
         ${SUDO} docker rmi -f debian:trixie-slim >/dev/null 2>&1 || true
     fi
 }
+
+guard_pid=""
+
 start_session_guard() {
     local proj="$1"
     local yml="$2"
     local parent="$$"
-    local tty="${SSH_TTY:-$(tty 2>/dev/null || echo)}"
+    local tty_path
+    tty_path="${SSH_TTY:-$(tty 2>/dev/null || echo)}"
     mkdir -p "${tmp_folder}/${proj}"
     local guard="${tmp_folder}/${proj}/._guard.sh"
+    local pidfile="${tmp_folder}/${proj}/._guard.pid"
+
     cat >"$guard" <<'EOS'
 #!/usr/bin/env bash
 set -Eeuo pipefail
-trap '' HUP INT TERM
-proj="$1"; yml="$2"; parent="$3"; tty="$4"
+
+proj="$1"
+yml="$2"
+parent="$3"
+tty_path="$4"
+
+on_term() {
+    if [[ -f "$yml" ]]; then
+        ${SUDO:-} docker compose -p "$proj" -f "$yml" down --rmi local --volumes --remove-orphans >/dev/null 2>&1 || true
+    fi
+
+    for name in exit_a exit_b haproxy bitlaunch; do
+        ${SUDO:-} docker ps -aq -f "name=^${name}$" | xargs ${xargs_r:-} ${SUDO:-} docker rm -f >/dev/null 2>&1 || true
+    done
+
+    ${SUDO:-} docker network ls -q --filter "label=com.docker.compose.project=${proj}" | xargs ${xargs_r:-} ${SUDO:-} docker network rm >/dev/null 2>&1 || true
+    ${SUDO:-} docker volume ls -q --filter "label=com.docker.compose.project=${proj}" | xargs ${xargs_r:-} ${SUDO:-} docker volume rm -f >/dev/null 2>&1 || true
+
+    exit 0
+}
+
+trap on_term INT TERM HUP
+
 while :; do
     kill -0 "$parent" 2>/dev/null || break
-    if [[ -n "$tty" && ! -e "$tty" ]]; then break; fi
+    if [[ -n "$tty_path" && ! -e "$tty_path" ]]; then
+        break
+    fi
     sleep 1
 done
-if [[ -f "$yml" ]]; then
-    ${sudo_cmd:-} docker compose -p "$proj" -f "$yml" down --rmi local --volumes --remove-orphans >/dev/null 2>&1 || true
-fi
-for name in exit_a exit_b haproxy bit; do
-    ${sudo_cmd:-} docker ps -aq -f "name=^${name}$" | xargs ${xargs_r:-} ${sudo_cmd:-} docker rm -f >/dev/null 2>&1 || true
-done
-${sudo_cmd:-} docker network ls -q --filter "label=com.docker.compose.project=${proj}" | xargs ${xargs_r:-} ${sudo_cmd:-} docker network rm >/dev/null 2>&1 || true
-${sudo_cmd:-} docker volume ls -q --filter "label=com.docker.compose.project=${proj}" | xargs ${xargs_r:-} ${sudo_cmd:-} docker volume rm -f >/dev/null 2>&1 || true
+
+on_term
 EOS
+
     chmod +x "$guard"
-    ( export sudo_cmd="${SUDO}"; export xargs_r="$xargs_r"; nohup bash "$guard" "$proj" "$yml" "$parent" "$tty" >/dev/null 2>&1 & )
-    guard_pid=$!
+
+    if command -v setsid >/dev/null 2>&1; then
+        (
+            setsid -w bash "$guard" "$proj" "$yml" "$parent" "$tty_path" >/dev/null 2>&1 &
+            echo $! > "$pidfile"
+        )
+    else
+        (
+            nohup bash "$guard" "$proj" "$yml" "$parent" "$tty_path" >/dev/null 2>&1 &
+            echo $! > "$pidfile"
+        )
+    fi
+
+    guard_pid="$(cat "$pidfile" 2>/dev/null || true)"
 }
 stop_session_guard() {
-    [[ -n "${guard_pid:-}" ]] && kill "$guard_pid" 2>/dev/null || true
+    local pid="${guard_pid:-}"
+
+    if [[ -z "$pid" ]]; then
+        local pf
+        pf="$(find "${tmp_folder}" -maxdepth 3 -name '._guard.pid' 2>/dev/null | head -n1 || true)"
+        [[ -n "$pf" ]] && pid="$(cat "$pf" 2>/dev/null || true)"
+    fi
+
+    [[ -z "$pid" ]] && return 0
+
+    kill -TERM "$pid" 2>/dev/null || true
+    for _ in 1 2 3 4 5; do
+        kill -0 "$pid" 2>/dev/null || { unset guard_pid; return 0; }
+        sleep 0.2
+    done
+    kill -KILL "$pid" 2>/dev/null || true
     unset guard_pid
 }
 cleanup_all() {
     set +e
+
     stop_session_guard
     cleanup_project "${rnd_proj_name}" "${tmp_folder}/${rnd_proj_name}/docker-compose.yaml"
-    rm -rf -- "${tmp_folder}" 2>/dev/null || true
+
+    local f d
+    if [[ ${_tmp_files+x} ]]; then
+        for f in "${_tmp_files[@]}"; do
+            [[ -n "$f" ]] && rm -f "$f" 2>/dev/null || true
+        done
+    fi
+    if [[ ${_tmp_dirs+x} ]]; then
+        for d in "${_tmp_dirs[@]}"; do
+            [[ -n "$d" ]] && rm -rf "$d" 2>/dev/null || true
+        done
+    fi
+
+    rm -rf -- "${tmp_folder:-}" 2>/dev/null || true
 
     if ${SUDO} docker info >/dev/null 2>&1; then
         prune_build_caches
 
         if [[ "${STRICT_CLEANUP:-0}" == "1" ]]; then
-            echo "[warn] Performing system-wide prune (--all --volumes)."
+            warn "Performing system-wide prune (--all --volumes)."
             ${SUDO} docker system prune -af --volumes >/dev/null 2>&1 || true
         fi
     fi
 
     sudo_keepalive_stop
+    set -e
 }
 check_pkg() {
     local os=""
 
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        echo "[ok] Docker on macOS is ready."
+        info "Docker on macOS is ready."
         return 0
     fi
 
@@ -207,7 +302,7 @@ check_pkg() {
     if ! command -v docker >/dev/null 2>&1; then
         case "$os" in
             debian)
-                echo "[info] installing docker (Debian)…"
+                info "installing docker (Debian)…"
                 sudo install -d -m 0755 -o root -g root /etc/apt/keyrings
                 local arch codename
                 arch="$(dpkg --print-architecture)"
@@ -220,16 +315,16 @@ check_pkg() {
                 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1
                 ;;
             arch|manjaro)
-                echo "[info] installing docker (Arch/Manjaro)…"
-                sudo pacman -Sy --needed --noconfirm docker docker-compose
+                info "installing docker (Arch/Manjaro)…"
+                sudo pacman -Sy --needed --noconfirm docker docker-compose >/dev/null 2>&1
                 ;;
             *)
-                echo "[warn] unsupported distro '$os' – install docker manually."
+                warn "unsupported distro '$os' – install docker manually."
                 return 1
                 ;;
         esac
     else
-        echo "[ok] docker is present."
+        info "docker is present."
     fi
 
     if command -v systemctl >/dev/null 2>&1 && ( systemctl list-unit-files 2>/dev/null | grep -q '^docker\.service' ); then
@@ -238,27 +333,31 @@ check_pkg() {
 }
 run_build_proxy() {
     ext_network_container_subnet_cidr_ipv4="10.16.85.0/29"
-    ext_base=${ext_network_container_subnet_cidr_ipv4%/*}; ext_base=${ext_base%.*}.
+    ext_base=${ext_network_container_subnet_cidr_ipv4%/*}
+    ext_base=${ext_base%.*}.
     ext_network_container_gateway_ipv4="${ext_base}1"
     ext_network_container_exit_a_ipv4="${ext_base}2"
     ext_network_container_exit_b_ipv4="${ext_base}3"
-    
+
     int_network_container_subnet_cidr_ipv4="172.16.85.0/29"
-    int_base=${int_network_container_subnet_cidr_ipv4%/*}; int_base=${int_base%.*}.
+    int_base=${int_network_container_subnet_cidr_ipv4%/*}
+    int_base=${int_base%.*}.
     int_network_container_gateway_ipv4="${int_base}1"
     int_network_container_exit_a_ipv4="${int_base}2"
     int_network_container_exit_b_ipv4="${int_base}3"
     int_network_container_haproxy_ipv4="${int_base}4"
-    int_network_container_bit_ipv4="${int_base}5"
-    mkdir -p "${tmp_folder}/${rnd_proj_name}"/{exit_a,exit_b,haproxy,bit}
+    int_network_container_bitlaunch_ipv4="${int_base}5"
 
-cat <<EOF> "${tmp_folder}/${rnd_proj_name}/.env"
+    local proj_dir="${tmp_folder}/${rnd_proj_name}"
+    mkdir -p "${tmp_folder}/${rnd_proj_name}"/{exit_a,exit_b,haproxy,bitlaunch}
+
+cat <<EOF > "${tmp_folder}/${rnd_proj_name}/.env"
 int_network_container_subnet_cidr_ipv4="$int_network_container_subnet_cidr_ipv4"
 int_network_container_gateway_ipv4="$int_network_container_gateway_ipv4"
 int_network_container_haproxy_ipv4="${int_network_container_haproxy_ipv4}"
 int_network_container_exit_a_ipv4="${int_network_container_exit_a_ipv4}"
 int_network_container_exit_b_ipv4="${int_network_container_exit_b_ipv4}"
-int_network_container_bit_ipv4="${int_network_container_bit_ipv4}"
+int_network_container_bitlaunch_ipv4="${int_network_container_bitlaunch_ipv4}"
 ext_network_container_subnet_cidr_ipv4="$ext_network_container_subnet_cidr_ipv4"
 ext_network_container_gateway_ipv4="$ext_network_container_gateway_ipv4"
 ext_network_container_exit_a_ipv4="$ext_network_container_exit_a_ipv4"
@@ -340,10 +439,10 @@ services:
       internal_network:
         ipv4_address: ${int_network_container_haproxy_ipv4}
 
-  bit:
-    container_name: bit
+  bitlaunch:
+    container_name: bitlaunch
     build:
-      context: ./bit
+      context: ./bitlaunch
       dockerfile: Dockerfile
       args:
         int_network_container_haproxy_ipv4: "${int_network_container_haproxy_ipv4}"
@@ -357,7 +456,7 @@ services:
     restart: unless-stopped
     networks:
       internal_network:
-        ipv4_address: ${int_network_container_bit_ipv4}
+        ipv4_address: ${int_network_container_bitlaunch_ipv4}
 
 networks:
   external_network:
@@ -583,7 +682,7 @@ RUN apt-get autoremove -y && \
 CMD ["haproxy","-f","/etc/haproxy/haproxy.cfg","-db"]
 EOF
 
-cat <<'EOF'> "${tmp_folder}/${rnd_proj_name}/bit/Dockerfile"
+cat <<'EOF'> "${tmp_folder}/${rnd_proj_name}/bitlaunch/Dockerfile"
 FROM debian:trixie-slim
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -609,7 +708,7 @@ RUN sed -i 's|http://deb.debian.org/debian|https://deb.debian.org/debian|g' /etc
 
 RUN useradd -m user && chown -R user:user /home/user
 
-RUN cat <<'EOL' > /home/user/bit
+RUN cat <<'EOL' > /home/user/bitlaunch
 #!/bin/bash
 set -Eeuo pipefail
 
@@ -643,7 +742,6 @@ safe_fmt_date() {
     local _fmt="${2:-+%d.%m.%Y}"
     date -d "$_in" "$_fmt" 2>/dev/null || echo "$_in"
 }
-
 on_sigint() {
     # Clear previous UI (screen + scrollback), then show final message once
     if [[ -t 1 ]]; then
@@ -653,7 +751,6 @@ on_sigint() {
     cleanup
     exit 130
 }
-
 on_sigterm() {
     if [[ -t 1 ]]; then
         printf '\e[2J\e[3J\e[H'
@@ -667,9 +764,6 @@ trap on_sigint INT
 trap on_sigterm TERM
 trap 'cleanup' EXIT
 
-# ----- Original functions (kept in your style) -----
-
-# Random sleep in seconds. Usage: delay [min] [max]
 delay() {
     local min="${1:-1.5}"
     local max="${2:-2.0}"
@@ -678,8 +772,6 @@ delay() {
     rand=$(awk -v min="$min" -v max="$max" -v seed="$seed" 'BEGIN{srand(systime() + seed); print min + rand() * (max - min)}')
     [[ -n "$rand" ]] && sleep "$rand"
 }
-
-# Usage: validate_api_key "$API_KEY"
 validate_api_key() {
     local key="${1:-$API_KEY}"
     local expected_prefix="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
@@ -2311,21 +2403,62 @@ show_main_menu
 EOL
 
 RUN chown -R user:user /home/user && \
-    chmod +x /home/user/bit
+    chmod +x /home/user/bitlaunch
 
 USER user
 WORKDIR /home/user
 CMD ["sleep","infinity"]
 EOF
 }
+wait_health() {
+    local name="$1" timeout="${2:-180}" id hs run i
+    for ((i=0; i<timeout; i++)); do
+        id="$(${SUDO:-} docker ps --filter "name=^${name}$" --format '{{.ID}}' | head -n1)"
+        if [[ -n "$id" ]]; then
+            hs="$(${SUDO:-} docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{""}}{{end}}' "$id" 2>/dev/null || true)"
+            run="$(${SUDO:-} docker inspect -f '{{.State.Running}}' "$id" 2>/dev/null || true)"
+            if [[ "$hs" == "healthy" || ( -z "$hs" && "$run" == "true" ) ]]; then
+                return 0
+            fi
+        fi
+        sleep 1
+    done
+    return 1
+}
+print_health_log() {
+    local name="$1" id
+    id="$(${SUDO:-} docker ps --filter "name=^${name}$" --format '{{.ID}}' | head -n1)"
+    [[ -n "$id" ]] || return 0
 
-tmp_folder="$(mktemp -d -t bitstack.XXXXXXXX)"
-rnd_proj_name="bitstack_$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 8 || true)"
-
+    ${SUDO:-} docker inspect -f '{{range .State.Health.Log}}{{printf "[%s] code=%d %s\n" .Start .ExitCode .Output}}{{end}}' "$id" 1>&2 || true
+}
+wait_stack_ready() {
+    info "Waiting for exit_a health"
+    if ! wait_health exit_a 180; then
+        err "exit_a did not become healthy. Health log:"
+        print_health_log exit_a
+        die "Startup failed"
+    fi
+    info "Waiting for exit_b health"
+    if ! wait_health exit_b 180; then
+        err "exit_b did not become healthy. Health log:"
+        print_health_log exit_b
+        die "Startup failed"
+    fi
+    info "Waiting for haproxy health"
+    if ! wait_health haproxy 180; then
+        err "haproxy did not become healthy. Health log:"
+        print_health_log haproxy
+        die "Startup failed"
+    fi
+    info "All proxy containers are healthy."
+}
+tmp_folder="$(mktemp -d -t bitlaunchstack.XXXXXXXX)"
+append_tmp_dir "$tmp_folder"
+rnd_proj_name="bitlaunchstack_$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 8 || true)"
 sudo_keepalive_start 90
 trap 'cleanup_all; exit 130' INT
 trap 'cleanup_all' EXIT TERM HUP QUIT
-
 preclean_patterns
 check_pkg
 tor_ctrl_pass="$(LC_ALL=C tr -dc 'A-Za-z0-9!?+=_' </dev/urandom | head -c 32 || true)"
@@ -2341,9 +2474,13 @@ tor_ctrl_hash="$(
 run_build_proxy
 __compose -p "${rnd_proj_name}" -f "${tmp_folder}/${rnd_proj_name}/docker-compose.yaml" build --no-cache
 __compose -p "${rnd_proj_name}" -f "${tmp_folder}/${rnd_proj_name}/docker-compose.yaml" up -d --force-recreate
+wait_stack_ready
 start_session_guard "${rnd_proj_name}" "${tmp_folder}/${rnd_proj_name}/docker-compose.yaml"
 sleep 2
+
 tty_flag="-i"
-if [ -t 1 ]; then tty_flag="-it"; fi
-clear; printf '\e[3J'
-${SUDO} docker exec $tty_flag bit /bin/bash -lc 'exec ./bit'
+if [ -t 1 ]; then
+    tty_flag="-it"
+fi
+clear_scr
+${SUDO} docker exec $tty_flag bitlaunch /bin/bash -lc 'exec ./bitlaunch'
