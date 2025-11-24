@@ -3,9 +3,9 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 umask 077
 
-if [[ "${OSTYPE-}" != "darwin"* ]]; then
-    : > "$HOME/.bash_history" 2>/dev/null || true
-    : > "$HOME/.zsh_history" 2>/dev/null || true
+if [[ "$OSTYPE" != "darwin"* ]]; then
+    [ -f "$HOME/.zsh_history" ] && : > "$HOME/.zsh_history" || true
+    [ -f "$HOME/.bash_history" ] && : > "$HOME/.bash_history" || true
 fi
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
