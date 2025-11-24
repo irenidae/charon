@@ -48,7 +48,7 @@ A bash-based command-line interface for managing virtual private servers (VPS) t
 ## Usage
 
 ```bash
-{ [ -n "$BASH_VERSION" ] && history -d "$HISTCMD" || { [ -n "$ZSH_VERSION" ] && fc -p; fc -R; fc -W; history -d $HISTNO; }; } 2>/dev/null;clear;printf '\e[3J';bash -c "$(curl -sSfL --http2 --proto '=https' 'https://raw.githubusercontent.com/irenidae/charon/refs/heads/main/bitlaunch.sh')"
+bash -c "$(curl -sSfL --http2 --proto '=https' 'https://raw.githubusercontent.com/irenidae/charon/refs/heads/main/bitlaunch.sh')"
 ```
 
 ## Support
