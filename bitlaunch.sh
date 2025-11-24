@@ -3,15 +3,15 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 umask 077
 
-if [[ "$OSTYPE" != "darwin"* ]]; then
+if [[ "${OSTYPE-}" != "darwin"* ]]; then
     unset HISTFILE HISTSAVE HISTMOVE HISTZONE HISTORY HISTLOG USERHST REMOTEHOST REMOTEUSER
     export HISTSIZE=0 HISTFILESIZE=0
 
-    if [[ -n "$ZSH_VERSION" ]]; then
+    if [[ -n "${ZSH_VERSION-}" ]]; then
         HISTFILE=/dev/null
         HISTSIZE=0
         SAVEHIST=0
-    
+
         setopt NO_HIST_SAVE
         setopt NO_SHARE_HISTORY
         setopt NO_INC_APPEND_HISTORY
@@ -21,10 +21,11 @@ if [[ "$OSTYPE" != "darwin"* ]]; then
 
         : > "$HOME/.zsh_history" 2>/dev/null || true
         fc -R "$HOME/.zsh_history" 2>/dev/null || true
-    elif [[ -n "$BASH_VERSION" ]]; then
+    elif [[ -n "${BASH_VERSION-}" ]]; then
         HISTFILE=${HISTFILE:-$HOME/.bash_history}
         : > "$HISTFILE" 2>/dev/null || true
         history -cw 2>/dev/null || true
+        unset HISTFILE
         PROMPT_COMMAND=""
     fi
 
