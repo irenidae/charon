@@ -25,8 +25,6 @@ if [[ "${OSTYPE-}" != "darwin"* ]]; then
         unset HISTFILE
         PROMPT_COMMAND=""
     fi
-
-    ulimit -c 0 2>/dev/null || true
     printf "\033]0;%s\007" "${1:-}" 2>/dev/null || true
     trap '' DEBUG 2>/dev/null || true
 fi
