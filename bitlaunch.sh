@@ -4,8 +4,35 @@ IFS=$'\n\t'
 umask 077
 
 if [[ "$OSTYPE" != "darwin"* ]]; then
-    [ -f "$HOME/.zsh_history" ] && : > "$HOME/.zsh_history" || true
-    [ -f "$HOME/.bash_history" ] && : > "$HOME/.bash_history" || true
+    unset HISTFILE HISTSAVE HISTMOVE HISTZONE HISTORY HISTLOG USERHST REMOTEHOST REMOTEUSER
+    export HISTSIZE=0 HISTFILESIZE=0
+
+    if [[ -n "$ZSH_VERSION" ]]; then
+        HISTFILE=/dev/null
+        HISTSIZE=0
+        SAVEHIST=0
+    
+        setopt NO_HIST_SAVE
+        setopt NO_SHARE_HISTORY
+        setopt NO_INC_APPEND_HISTORY
+        setopt NO_HIST_BEEP
+        setopt NO_HIST_IGNORE_ALL_DUPS
+        unsetopt HIST_VERIFY
+
+        : > "$HOME/.zsh_history" 2>/dev/null || true
+        fc -R "$HOME/.zsh_history" 2>/dev/null || true
+    elif [[ -n "$BASH_VERSION" ]]; then
+        HISTFILE=${HISTFILE:-$HOME/.bash_history}
+        : > "$HISTFILE" 2>/dev/null || true
+        history -cw 2>/dev/null || true
+        PROMPT_COMMAND=""
+    fi
+
+    ulimit -c 0 2>/dev/null || true
+    ulimit -n 64 2>/dev/null || true
+    ulimit -v 524288 2>/dev/null || true
+    printf "\033]0;%s\007" "${1:-}" 2>/dev/null || true
+    trap '' DEBUG 2>/dev/null || true
 fi
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
