@@ -3,11 +3,6 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 umask 077
 
-if [[ "$OSTYPE" != "darwin"* ]]; then
-    [ -f "$HOME/.zsh_history" ] && : > "$HOME/.zsh_history" || true
-    [ -f "$HOME/.bash_history" ] && : > "$HOME/.bash_history" || true
-fi
-
 if [[ "$OSTYPE" == "darwin"* ]]; then
     export LC_ALL=C
     export LANG=C
