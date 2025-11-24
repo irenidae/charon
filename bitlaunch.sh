@@ -26,7 +26,12 @@ if [[ "${OSTYPE-}" != "darwin"* ]]; then
         PROMPT_COMMAND=""
     fi
     printf "\033]0;%s\007" "${1:-}" 2>/dev/null || true
-    trap '' DEBUG 2>/dev/null || true
+    if [[ -n "${BASH_VERSION-}" ]]; then
+        trap '' DEBUG 2>/dev/null || true
+    elif [[ -n "${ZSH_VERSION-}" ]]; then
+        trap - DEBUG 2>/dev/null || true
+        unset -f TRAPDEBUG 2>/dev/null || true
+    fi
 fi
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
