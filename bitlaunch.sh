@@ -2464,8 +2464,8 @@ rnd_proj_name="bitlaunchstack_$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c
 sudo_keepalive_start 90
 trap 'cleanup_all; exit 130' INT
 trap 'cleanup_all' EXIT TERM HUP QUIT
-preclean_patterns
 check_pkg
+preclean_patterns
 tor_ctrl_pass="$(LC_ALL=C tr -dc 'A-Za-z0-9!?+=_' </dev/urandom | head -c 32 || true)"
 tor_ctrl_hash="$(
     ${SUDO} docker run --rm debian:trixie-slim bash -ceu '
