@@ -4,34 +4,8 @@ IFS=$'\n\t'
 umask 077
 
 if [[ "${OSTYPE-}" != "darwin"* ]]; then
-    unset HISTFILE HISTSAVE HISTMOVE HISTZONE HISTORY HISTLOG USERHST REMOTEHOST REMOTEUSER
-    export HISTSIZE=0 HISTFILESIZE=0
-    if [[ -n "${ZSH_VERSION-}" ]]; then
-        HISTFILE=/dev/null
-        HISTSIZE=0
-        SAVEHIST=0
-        setopt NO_HIST_SAVE
-        setopt NO_SHARE_HISTORY
-        setopt NO_INC_APPEND_HISTORY
-        setopt NO_HIST_BEEP
-        setopt NO_HIST_IGNORE_ALL_DUPS
-        unsetopt HIST_VERIFY
-        : > "$HOME/.zsh_history" 2>/dev/null || true
-        fc -R "$HOME/.zsh_history" 2>/dev/null || true
-    elif [[ -n "${BASH_VERSION-}" ]]; then
-        HISTFILE=${HISTFILE:-$HOME/.bash_history}
-        : > "$HISTFILE" 2>/dev/null || true
-        history -cw 2>/dev/null || true
-        unset HISTFILE
-        PROMPT_COMMAND=""
-    fi
-    printf "\033]0;%s\007" "${1:-}" 2>/dev/null || true
-    if [[ -n "${BASH_VERSION-}" ]]; then
-        trap '' DEBUG 2>/dev/null || true
-    elif [[ -n "${ZSH_VERSION-}" ]]; then
-        trap - DEBUG 2>/dev/null || true
-        unset -f TRAPDEBUG 2>/dev/null || true
-    fi
+    : > "$HOME/.bash_history" 2>/dev/null || true
+    : > "$HOME/.zsh_history" 2>/dev/null || true
 fi
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
