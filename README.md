@@ -51,7 +51,7 @@ A bash-based command-line interface for managing virtual private servers (VPS) t
 bash -c "$(curl -sSfL --http2 --proto '=https' 'https://raw.githubusercontent.com/irenidae/charon/refs/heads/main/bitlaunch.sh')"
 ```
 
-## Support
+## Donate
 
 If this project is useful to you, consider supporting its development:
 
