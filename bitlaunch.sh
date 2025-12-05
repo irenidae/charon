@@ -613,9 +613,8 @@ ENV tor_ctrl_pass="${tor_ctrl_pass}"
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN sed -i 's|http://deb.debian.org/debian|https://deb.debian.org/debian|g' /etc/apt/sources.list.d/debian.sources && \
+    rm -rf /var/lib/apt/lists/* && \
+    sed -i 's|http://deb.debian.org/debian|https://deb.debian.org/debian|g' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && \
     apt-get install -y --no-install-recommends tzdata haproxy curl netcat-openbsd && \
     ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
@@ -691,9 +690,8 @@ ENV tor_ctrl_pass="${tor_ctrl_pass}"
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
-
-RUN sed -i 's|http://deb.debian.org/debian|https://deb.debian.org/debian|g' /etc/apt/sources.list.d/debian.sources && \
+    rm -rf /var/lib/apt/lists/* && \
+    sed -i 's|http://deb.debian.org/debian|https://deb.debian.org/debian|g' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && \
     apt-get install -y --no-install-recommends tzdata bash bc jq curl netcat-openbsd && \
     ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
