@@ -705,7 +705,7 @@ set -Eeuo pipefail
 
 API_TOKEN=""
 HTTP_HEADERS=()
-PROXY_ARG="--proxy socks5h://${int_network_container_haproxy_ipv4}:9095"
+PROXY_ARGS=(--proxy "socks5h://${int_network_container_haproxy_ipv4}:9095")
 
 # ----- Global traps & helpers (clear UI but keep final message) -----
 
@@ -976,12 +976,12 @@ list_vms() {
 
     local i=0
     local user_data
-    until ((i++ >= 3)) || { user_data=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" "https://app.bitlaunch.io/api/user"); [[ -n "$user_data" ]]; }; do delay; done
+    until ((i++ >= 3)) || { user_data=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" "https://app.bitlaunch.io/api/user"); [[ -n "$user_data" ]]; }; do delay; done
     delay
 
     i=0
     local server_data
-    until ((i++ >= 3)) || { server_data=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" "https://app.bitlaunch.io/api/servers"); [[ -n "$server_data" ]]; }; do delay; done
+    until ((i++ >= 3)) || { server_data=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" "https://app.bitlaunch.io/api/servers"); [[ -n "$server_data" ]]; }; do delay; done
 
     if [[ "$user_data" != "null" && -n "$user_data" ]]; then
         local account_creation_date balance email email_confirmed
@@ -1098,13 +1098,13 @@ create_vm_bitlaunch() {
     echo "Creating VM on Bitlaunch..."
 
     local i=0 user_data
-    until ((i++ >= 3)) || { user_data=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" "https://app.bitlaunch.io/api/user"); [[ -n "$user_data" ]]; }; do delay; done
+    until ((i++ >= 3)) || { user_data=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" "https://app.bitlaunch.io/api/user"); [[ -n "$user_data" ]]; }; do delay; done
     local balance=$(echo "$user_data" | jq -r '.balance / 1000')
     [[ "$balance" == "0" ]] && { clear; printf '\e[3J'; printf "It is impossible to create a virtual machine because there are insufficient funds in your account.\nPlease top up your account and try again.\n"; show_server_menu; return; }
 
     i=0
     local bit_json
-    until ((i++ >= 3)) || { bit_json=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" "https://app.bitlaunch.io/api/hosts-create-options/4"); [[ -n "$bit_json" ]] && [[ "$bit_json" != "{}" ]] && [[ "$(echo "$bit_json" | jq -r '. | length')" -gt 0 ]]; }; do delay; done
+    until ((i++ >= 3)) || { bit_json=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" "https://app.bitlaunch.io/api/hosts-create-options/4"); [[ -n "$bit_json" ]] && [[ "$bit_json" != "{}" ]] && [[ "$(echo "$bit_json" | jq -r '. | length')" -gt 0 ]]; }; do delay; done
     [[ -z "$bit_json" ]] || [[ "$bit_json" == "{}" ]] || [[ "$(echo "$bit_json" | jq -r '. | length')" -eq 0 ]] && { echo "API Token is not valid"; show_server_menu; return; }
 
     local standard=$(echo "$bit_json" | jq -r '.size | map(select(.planType == "standard")) | .[0:6] | map("\(.id) \(.cpuCount)CPU/\(.memoryMB / 1024)GB \(.diskGB)GB \(.disks[].type) \(.costPerMonth) USD/Month") | join("\n")')
@@ -1173,7 +1173,7 @@ create_vm_bitlaunch() {
                     while [[ $attempt -lt $max_attempts && "$vm_created" == false ]]; do
                         local response j=0
                         until ((j++ >= 2)) || {
-                            response=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 10 --max-time 10 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -d '{"server": {"name": "'"$vm_name"'", "hostID": 4, "hostImageID": "'"$image_id"'", "sizeID": "'"$selected_plan_id"'", "regionID": "'"$selected_subregion"'", "password": "'"$password"'"}}' -X POST "https://app.bitlaunch.io/api/servers")
+                            response=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 10 --max-time 10 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -d '{"server": {"name": "'"$vm_name"'", "hostID": 4, "hostImageID": "'"$image_id"'", "sizeID": "'"$selected_plan_id"'", "regionID": "'"$selected_subregion"'", "password": "'"$password"'"}}' -X POST "https://app.bitlaunch.io/api/servers")
                             [[ -n "$response" ]] && [[ "$response" != "{}" ]] && [[ "$(echo "$response" | jq -r '. | length')" -gt 0 ]]
                         }; do delay; done
                         [[ -z "$response" ]] || [[ "$response" == "{}" ]] || [[ "$(echo "$response" | jq -r '. | length')" -eq 0 ]] && { echo "API Token is not valid or server is not responding"; show_server_menu; return; }
@@ -1185,7 +1185,7 @@ create_vm_bitlaunch() {
 
                         local server_data
                         j=0
-                        until ((j++ >= 3)) || { server_data=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" "https://app.bitlaunch.io/api/servers"); [[ -n "$server_data" ]]; }; do delay; done
+                        until ((j++ >= 3)) || { server_data=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" "https://app.bitlaunch.io/api/servers"); [[ -n "$server_data" ]]; }; do delay; done
                         local last_vm=$(echo "$server_data" | jq --arg vm_id "$vm_id" -r '.[] | select(.id == $vm_id)')
                         local status=$(echo "$last_vm" | jq -r '.status')
                         local vm_ip=$(echo "$last_vm" | jq -r '.ipv4')
@@ -1193,7 +1193,7 @@ create_vm_bitlaunch() {
                         if [[ "$status" == "error" ]] || [[ -z "$vm_ip" ]]; then
                             j=0
                             until ((j++ >= 2)) || {
-                                response=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 10 --max-time 10 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X DELETE "https://app.bitlaunch.io/api/servers/${vm_id}")
+                                response=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 10 --max-time 10 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X DELETE "https://app.bitlaunch.io/api/servers/${vm_id}")
                                 [[ -n "$response" ]]
                             }; do delay; done
                             if [[ "$(echo "$response" | jq '.')" == "null" ]] || [[ "$(echo "$response" | jq '.')" == "{}" ]]; then
@@ -1254,7 +1254,7 @@ create_vm_digital_ocean() {
     echo "Creating VM on Digital Ocean..."
 
     local i=0 user_data
-    until ((i++ >= 3)) || { user_data=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" "https://app.bitlaunch.io/api/user"); [[ -n "$user_data" ]]; }; do delay; done
+    until ((i++ >= 3)) || { user_data=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" "https://app.bitlaunch.io/api/user"); [[ -n "$user_data" ]]; }; do delay; done
     local balance=$(echo "$user_data" | jq -r '.balance / 1000')
     [[ "$balance" == "0" ]] && { clear; printf '\e[3J'; printf "It is impossible to create a virtual machine because there are insufficient funds in your account.\nPlease top up your account and try again.\n"; show_server_menu; return; }
 
@@ -1262,7 +1262,7 @@ create_vm_digital_ocean() {
 
     i=0
     local do_json
-    until ((i++ >= 3)) || { do_json=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" "https://app.bitlaunch.io/api/hosts-create-options/0"); [[ -n "$do_json" ]] && [[ "$do_json" != "{}" ]] && [[ "$(echo "$do_json" | jq -r '. | length')" -gt 0 ]]; }; do delay; done
+    until ((i++ >= 3)) || { do_json=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" "https://app.bitlaunch.io/api/hosts-create-options/0"); [[ -n "$do_json" ]] && [[ "$do_json" != "{}" ]] && [[ "$(echo "$do_json" | jq -r '. | length')" -gt 0 ]]; }; do delay; done
     [[ -z "$do_json" ]] || [[ "$do_json" == "[]" ]] || [[ "$(echo "$do_json" | jq -r '. | length')" -eq 0 ]] && { echo "API Token is not valid"; show_server_menu; return; }
 
     local unavailable_sizes unavailable_regions
@@ -1392,7 +1392,7 @@ create_vm_digital_ocean() {
                         local response
                         local j=0
                         until ((j++ >= 2)) || {
-                            response=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 10 --max-time 10 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -d '{"server": {"name": "'"$vm_name"'","hostID": 0,"hostImageID": "'"$image_id"'","sizeID": "'"$selected_plan_id"'","regionID": "'"$selected_subregion"'","password": "'"$password"'"}}' -X POST "https://app.bitlaunch.io/api/servers")
+                            response=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 10 --max-time 10 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -d '{"server": {"name": "'"$vm_name"'","hostID": 0,"hostImageID": "'"$image_id"'","sizeID": "'"$selected_plan_id"'","regionID": "'"$selected_subregion"'","password": "'"$password"'"}}' -X POST "https://app.bitlaunch.io/api/servers")
                             [[ -n "$response" ]] && [[ "$response" != "{}" ]] && [[ "$(echo "$response" | jq -r '. | length')" -gt 0 ]]
                         }; do delay; done
                         [[ -z "$response" ]] || [[ "$response" == "{}" ]] || [[ "$(echo "$response" | jq -r '. | length')" -eq 0 ]] && { echo "API Token is not valid or server is not responding"; show_server_menu; return; }
@@ -1405,7 +1405,7 @@ create_vm_digital_ocean() {
 
                         local server_data
                         j=0
-                        until ((j++ >= 3)) || { server_data=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" "https://app.bitlaunch.io/api/servers"); [[ -n "$server_data" ]]; }; do delay; done
+                        until ((j++ >= 3)) || { server_data=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" "https://app.bitlaunch.io/api/servers"); [[ -n "$server_data" ]]; }; do delay; done
                         local last_vm status vm_ip
                         last_vm=$(echo "$server_data" | jq --arg vm_id "$vm_id" -r '.[] | select(.id == $vm_id)')
                         status=$(echo "$last_vm" | jq -r '.status')
@@ -1414,7 +1414,7 @@ create_vm_digital_ocean() {
                         if [[ "$status" == "error" ]] || [[ -z "$vm_ip" ]]; then
                             j=0
                             until ((j++ >= 2)) || {
-                                response=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 10 --max-time 10 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X DELETE "https://app.bitlaunch.io/api/servers/${vm_id}")
+                                response=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' --connect-timeout 10 --max-time 10 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" -X DELETE "https://app.bitlaunch.io/api/servers/${vm_id}")
                                 [[ -n "$response" ]]
                             }; do delay; done
                             if [[ "$(echo "$response" | jq '.')" == "null" ]] || [[ "$(echo "$response" | jq '.')" == "{}" ]]; then
@@ -1475,7 +1475,7 @@ remove_vm() {
     echo "Removing VM..."
     local i=0 server_data
     until ((i++ >= 3)); do
-        server_data=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' \
+        server_data=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' \
             --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" \
             "https://app.bitlaunch.io/api/servers")
         [[ -n "$server_data" ]] && break
@@ -1546,7 +1546,7 @@ remove_vm() {
                         echo "Proceeding with VM deletion..."
                         local j=0 response
                         until ((j++ >= 2)); do
-                            response=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' \
+                            response=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' \
                                 --connect-timeout 10 --max-time 10 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" \
                                 -H "Content-Type: application/json" -X DELETE \
                                 "https://app.bitlaunch.io/api/servers/${vm_id}")
@@ -1601,7 +1601,7 @@ restart_vm() {
     echo "Restarting VM..."
     local i=0 server_data
     until ((i++ >= 3)); do
-        server_data=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' \
+        server_data=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' \
             --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" \
             "https://app.bitlaunch.io/api/servers")
         [[ -n "$server_data" ]] && break
@@ -1666,7 +1666,7 @@ restart_vm() {
                 echo "Proceeding with VM restarting..."
                 local j=0 response
                 until ((j++ >= 2)); do
-                    response=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' \
+                    response=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' \
                         --connect-timeout 10 --max-time 10 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" \
                         -X POST "https://app.bitlaunch.io/api/servers/${vm_id}/restart")
                     [[ -n "$response" ]] && break
@@ -1711,7 +1711,7 @@ rebuild_vm() {
     echo "Rebuilding VM..."
     local i=0 server_data
     until ((i++ >= 3)); do
-        server_data=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' \
+        server_data=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' \
             --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" \
             "https://app.bitlaunch.io/api/servers")
         [[ -n "$server_data" ]] && break
@@ -1792,7 +1792,7 @@ rebuild_vm() {
                             echo "Proceeding with VM rebuilding..."
                             local j=0 response
                             until ((j++ >= 2)); do
-                                response=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' \
+                                response=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' \
                                     --connect-timeout 10 --max-time 10 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" \
                                     -d '{"hostImageID": "'"$host_image_id"'", "imageDescription": "'"$image_description"'"}' \
                                     -X POST "https://app.bitlaunch.io/api/servers/${vm_id}/rebuild")
@@ -1858,7 +1858,7 @@ stop_vm() {
     echo "Stopping VM..."
     local i=0 server_data
     until ((i++ >= 3)); do
-        server_data=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' \
+        server_data=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' \
             --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" \
             "https://app.bitlaunch.io/api/servers")
         [[ -n "$server_data" ]] && break
@@ -1940,7 +1940,7 @@ stop_vm() {
                             echo "Proceeding with VM stopping..."
                             local j=0 response
                             until ((j++ >= 2)); do
-                                response=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' \
+                                response=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' \
                                     --connect-timeout 10 --max-time 10 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" \
                                     -X POST "https://app.bitlaunch.io/api/servers/${vm_id}/stop")
                                 [[ -n "$response" ]] && break
@@ -2055,7 +2055,7 @@ create_transaction() {
     # --- Create transaction ---
     local i=0 response
     until ((i++ >= 3)) || {
-        response=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' \
+        response=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' \
             --connect-timeout 10 --max-time 10 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" \
             -d '{ "amountUsd": '"$amount"', "cryptoSymbol": "'"$crypto_symbol"'" }' -X POST \
             "https://app.bitlaunch.io/api/transactions")
@@ -2132,7 +2132,7 @@ create_transaction() {
         if (( SECONDS - last_poll >= poll_interval )); then
             local list_json j=0
             until ((j++ >= 3)) || {
-                list_json=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' \
+                list_json=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' \
                     --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" \
                     "https://app.bitlaunch.io/api/transactions?page=1&items=25")
                 [[ -n "$list_json" ]]
@@ -2215,7 +2215,7 @@ list_transactions() {
     local i=0
     local response user_data
     until ((i++ >= 2)) || {
-        response=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' \
+        response=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' \
             --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" \
             "https://app.bitlaunch.io/api/transactions?page=1&items=25" | jq .)
         [[ -n "$response" ]] && [[ "$response" != "{}" ]] && [[ "$(echo "$response" | jq -r '. | length')" -gt 0 ]]
@@ -2230,7 +2230,7 @@ list_transactions() {
 
     i=0
     until ((i++ >= 2)) || {
-        user_data=$(curl $PROXY_ARG -sf --tlsv1.3 --http2 --proto '=https' \
+        user_data=$(curl "${PROXY_ARGS[@]}" -sf --tlsv1.3 --http2 --proto '=https' \
             --connect-timeout 6 --max-time 6 "${HTTP_HEADERS[@]}" -H "Authorization: Bearer $API_TOKEN" \
             "https://app.bitlaunch.io/api/user")
         [[ -n "$user_data" ]]
