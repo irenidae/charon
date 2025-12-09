@@ -693,7 +693,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     sed -i 's|http://deb.debian.org/debian|https://deb.debian.org/debian|g' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && \
-    apt-get install -y --no-install-recommends tzdata bash bc jq curl netcat-openbsd && \
+    apt-get install -y --no-install-recommends tzdata bash bc jq curl netcat-openbsd bsdextrautils && \
     ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
     dpkg-reconfigure -f noninteractive tzdata
 
