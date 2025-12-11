@@ -52,6 +52,43 @@ A bash-based command-line interface for managing virtual private servers (VPS) t
 bash -c "$(curl -sSfL --http2 --proto '=https' 'https://raw.githubusercontent.com/irenidae/charon/refs/heads/main/bitlaunch.sh')"
 ```
 
+## Njalla Domains Management CLI
+
+A bash-based command-line interface for managing domains via the Njalla API, with all traffic routed through Tor for strong privacy and an isolated Docker runtime.
+
+## Features
+
+- **Privacy & Anonymity**  
+  All API requests go through Tor, so your real IP is hidden from Njalla and intermediaries. API tokens and session data live only inside the container.
+
+- **Ephemeral Identities**  
+  You can request a fresh Tor circuit (NEWNYM) at any time and continue working with the same or a new Njalla API token, without leaking host information.
+
+- **No Host Footprint**  
+  Runs fully inside Docker on macOS/Linux. Nothing is installed on the host OS; on `Ctrl+C` or when exiting the script, all containers, networks and temporary images created by the script are torn down.
+
+- **Crypto Payments Only**  
+  Works with Njalla’s crypto payments model. Supported currencies: **BTC**, **LTC**, **XMR**, **ZEC**, **ETH**.
+
+- **Domain Search & Management**  
+  Search for available domains via Njalla’s API, view details for existing domains, and inspect their current status and configuration.
+
+- **Registration & Renewal**  
+  Purchase new domains and renew existing ones directly from the CLI, without using a browser.
+
+- **DNS Zone Management**  
+  List, add and remove DNS records (A, AAAA, CNAME, MX, TXT, etc.) for your domains, fully through the terminal.
+
+- **Simple Text UI**  
+  Minimalistic TUI-style prompts, comfortable for SSH sessions and low-bandwidth connections. No extra dependencies besides Docker and bash.
+
+
+## Usage
+
+```bash
+bash -c "$(curl -sSfL --http2 --proto '=https' 'https://raw.githubusercontent.com/irenidae/charon/refs/heads/main/njalla.sh')"
+```
+
 ## Donate
 
 If this project is useful to you, consider supporting its development:
