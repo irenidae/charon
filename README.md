@@ -12,7 +12,7 @@ Each script:
 ### Scripts
 
 - [bitlaunch.sh](#bitlaunch-vps-management-cli)
-
+- [njalla.sh](#njalla-domains-management-cli)
 _(More scripts coming soon.)_
 
 
