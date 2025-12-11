@@ -491,7 +491,8 @@ RUN ASC=$(curl -sSfL --tlsv1.3 --http2 --proto '=https' "https://deb.torproject.
 
 RUN mkdir -p /run/tor /var/lib/tor /usr/local/bin && \
     chown -R debian-tor:debian-tor /run/tor /var/lib/tor && \
-    chmod 700 /run/tor /var/lib/tor
+    chmod 750 /run/tor && \
+    chmod 700 /var/lib/tor
 
 RUN cat > /etc/tor/torrc <<EOL
 Log notice file /dev/null
@@ -555,7 +556,8 @@ RUN ASC=$(curl -sSfL --tlsv1.3 --http2 --proto '=https' "https://deb.torproject.
 
 RUN mkdir -p /run/tor /var/lib/tor /usr/local/bin && \
     chown -R debian-tor:debian-tor /run/tor /var/lib/tor && \
-    chmod 700 /run/tor /var/lib/tor
+    chmod 750 /run/tor && \
+    chmod 700 /var/lib/tor
 
 RUN cat > /etc/tor/torrc <<EOL
 Log notice file /dev/null
@@ -670,7 +672,8 @@ RUN apt-get update && \
     ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
     dpkg-reconfigure -f noninteractive tzdata
 
-RUN useradd -u 100 -g 100 -r -M -s /usr/sbin/nologin user && \
+RUN groupadd -g 101 user && \
+    useradd -u 1000 -g 101 -r -M -s /usr/sbin/nologin user && \
     mkdir -p /opt/njalla
     
 RUN cat > /opt/njalla/njalla <<'EOL'
@@ -1072,15 +1075,15 @@ domain_info() {
 api_url="https://njallalafimoej5i4eg7vlnqjvmb6zhdh27qxcatdn647jtwwwui3nad.onion/api/1/"
 expected_prefix="${expected_prefix:-}"
 prompt_for_api_token
-#domain_info
+domain_info
 tor_newnym
 add_a_records
 EOL
 
-RUN chown -R 100:100 /opt/njalla && \
+RUN chown -R 1000:101 /opt/njalla && \
     chmod +x /opt/njalla/njalla
 
-USER user
+USER 1000:101
 WORKDIR /opt/njalla
 CMD ["sleep","infinity"]
 EOF
