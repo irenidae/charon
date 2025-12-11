@@ -374,7 +374,7 @@ services:
     restart: unless-stopped
     logging: { driver: "none" }
     volumes:
-      - tor_run_a:/run/tor
+      - exit_a:/run/tor
     networks:
       external_network:
         ipv4_address: ${ext_network_container_exit_a_ipv4}
@@ -400,7 +400,7 @@ services:
     restart: unless-stopped
     logging: { driver: "none" }
     volumes:
-      - tor_run_b:/run/tor
+      - exit_b:/run/tor
     networks:
       external_network:
         ipv4_address: ${ext_network_container_exit_b_ipv4}
@@ -441,8 +441,8 @@ services:
     restart: unless-stopped
     logging: { driver: "none" }
     volumes:
-      - tor_run_a:/run/tor_a:ro
-      - tor_run_b:/run/tor_b:ro
+      - exit_a:/run/tor_a:ro
+      - exit_b:/run/tor_b:ro
     networks:
       internal_network:
         ipv4_address: ${int_network_container_njalla_ipv4}
@@ -463,8 +463,8 @@ networks:
           gateway: ${int_network_container_gateway_ipv4}
 
 volumes:
-  tor_run_a:
-  tor_run_b:
+  exit_a:
+  exit_b:
 EOF
 
 cat <<'EOF'> "${tmp_folder}/${rnd_proj_name}/exit_a/Dockerfile"
@@ -510,7 +510,7 @@ ConnectionPadding 1
 ReducedConnectionPadding 0
 EOL
 
-RUN cat <<'EOL' > /usr/local/bin/healthcheck
+RUN cat > /usr/local/bin/healthcheck <<'EOL'
 #!/bin/bash
 set -e
 nc -z ${int_network_container_exit_a_ipv4} 9095 >/dev/null 2>&1 || exit 1
@@ -574,7 +574,7 @@ ConnectionPadding 1
 ReducedConnectionPadding 0
 EOL
 
-RUN cat <<'EOL' > /usr/local/bin/healthcheck
+RUN cat > /usr/local/bin/healthcheck <<'EOL'
 #!/bin/bash
 set -e
 nc -z ${int_network_container_exit_b_ipv4} 9095 >/dev/null 2>&1 || exit 1
@@ -602,7 +602,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 ARG int_network_container_haproxy_ipv4
 ARG int_network_container_exit_a_ipv4
 ARG int_network_container_exit_b_ipv4
-
 ENV int_network_container_haproxy_ipv4="${int_network_container_haproxy_ipv4}"
 ENV int_network_container_exit_a_ipv4="${int_network_container_exit_a_ipv4}"
 ENV int_network_container_exit_b_ipv4="${int_network_container_exit_b_ipv4}"
@@ -616,7 +615,7 @@ RUN apt-get update && \
     ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
     dpkg-reconfigure -f noninteractive tzdata
 
-RUN cat <<EOL > /etc/haproxy/haproxy.cfg
+RUN cat > /etc/haproxy/haproxy.cfg <<EOL
 global
     log stdout format raw local0
     maxconn 4096
@@ -671,10 +670,10 @@ RUN apt-get update && \
     ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
     dpkg-reconfigure -f noninteractive tzdata
 
-RUN useradd -u 100 -g 100 -r -M -s /usr/sbin/nologin debian-tor && \
+RUN useradd -u 100 -g 100 -r -M -s /usr/sbin/nologin user && \
     mkdir -p /opt/njalla
     
-RUN cat <<'EOL' > /opt/njalla/njalla
+RUN cat > /opt/njalla/njalla <<'EOL'
 #!/bin/bash
 set -Eeuo pipefail
 
@@ -1081,7 +1080,7 @@ EOL
 RUN chown -R 100:100 /opt/njalla && \
     chmod +x /opt/njalla/njalla
 
-USER debian-tor
+USER user
 WORKDIR /opt/njalla
 CMD ["sleep","infinity"]
 EOF
