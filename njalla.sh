@@ -5,8 +5,8 @@ umask 077
 
 info() { printf "[info] %s\n" "$*"; }
 warn() { printf "[warn] %s\n" "$*"; }
-err()  { printf "[error] %s\n" "$*" >&2; }
-die()  { err "$*"; exit 1; }
+err() { printf "[error] %s\n" "$*" >&2; }
+die() { err "$*"; exit 1; }
 wipe() { clear 2>/dev/null || true; printf '\e[3J' 2>/dev/null || true; }
 
 if [[ "$(id -u)" -eq 0 ]]; then
@@ -430,6 +430,15 @@ services:
       context: ./exit
       dockerfile: Dockerfile
     runtime: runc
+    init: true
+    stop_signal: SIGTERM
+    stop_grace_period: 5s
+    cap_drop: ["ALL"]
+    #cap_add: ["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE"]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,mode=1777
+      - /var/lib/tor:rw,nosuid,nodev,noexec,mode=0700,uid=100,gid=101
     security_opt:
       - no-new-privileges:true
     environment:
@@ -456,6 +465,15 @@ services:
     image: ${exit_image}
     pull_policy: never
     runtime: runc
+    init: true
+    stop_signal: SIGTERM
+    stop_grace_period: 5s
+    cap_drop: ["ALL"]
+    #cap_add: ["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE"]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,mode=1777
+      - /var/lib/tor:rw,nosuid,nodev,noexec,mode=0700,uid=100,gid=101
     security_opt:
       - no-new-privileges:true
     environment:
@@ -487,6 +505,16 @@ services:
         int_network_container_exit_a_ipv4: "${int_network_container_exit_a_ipv4}"
         int_network_container_exit_b_ipv4: "${int_network_container_exit_b_ipv4}"
     runtime: runc
+    init: true
+    stop_signal: SIGTERM
+    stop_grace_period: 2s
+    user: "haproxy:haproxy"
+    cap_drop: ["ALL"]
+    read_only: true
+    pids_limit: 100
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,mode=1777
+      - /run:rw,nosuid,nodev,noexec,mode=0755
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
@@ -506,6 +534,13 @@ services:
       args:
         int_network_container_haproxy_ipv4: "${int_network_container_haproxy_ipv4}"
     runtime: runc
+    init: true
+    stop_signal: SIGTERM
+    stop_grace_period: 2s
+    cap_drop: ["ALL"]
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,noexec,mode=1777
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
@@ -700,19 +735,43 @@ TORRC
 tor -f /run/tor/torrc &
 tor_pid=$!
 
-term() { kill -TERM "$tor_pid" 2>/dev/null || true; }
-trap term TERM INT
+shutdown() {
+    kill -TERM "$vg_pid" 2>/dev/null || true
+    kill -TERM "$tor_pid" 2>/dev/null || true
+
+    for _ in $(seq 1 50); do
+        kill -0 "$vg_pid" 2>/dev/null || vg_dead=1
+        kill -0 "$tor_pid" 2>/dev/null || tor_dead=1
+        if [[ "${vg_dead:-0}" == "1" && "${tor_dead:-0}" == "1" ]]; then
+            exit 0
+        fi
+        sleep 0.1
+    done
+
+    kill -KILL "$vg_pid" 2>/dev/null || true
+    kill -KILL "$tor_pid" 2>/dev/null || true
+    exit 0
+}
+trap shutdown TERM INT
 
 for _ in $(seq 1 240); do
-    if [ -S /run/tor/control.sock ] && [ -r /run/tor/control.authcookie ]; then
-        cookie="$(xxd -p /run/tor/control.authcookie | tr -d '\n')"
-        resp="$(printf "AUTHENTICATE $cookie\r\ngetinfo status/bootstrap-phase\r\nquit\r\n" | nc -U /run/tor/control.sock -w 5 -q 1 || true)"
-        echo "$resp" | grep -q 'PROGRESS=100' && break
-    fi
-    sleep 1
+  kill -0 "$tor_pid" 2>/dev/null || exit 1
+  if [ -S /run/tor/control.sock ] && [ -r /run/tor/control.authcookie ]; then
+    cookie="$(xxd -p /run/tor/control.authcookie | tr -d '\n')"
+    resp="$(printf "AUTHENTICATE %s\r\ngetinfo status/bootstrap-phase\r\nquit\r\n" "$cookie" | nc -U /run/tor/control.sock -w 5 -q 1 || true)"
+    echo "$resp" | grep -q 'PROGRESS=100' && break
+  fi
+  sleep 1
 done
 
-exec vanguards --config /etc/tor/vanguards.conf
+if ! ( [ -S /run/tor/control.sock ] && [ -r /run/tor/control.authcookie ] ); then
+    exit 1
+fi
+
+vanguards --config /etc/tor/vanguards.conf &
+vg_pid=$!
+wait -n "$tor_pid" "$vg_pid" || true
+shutdown
 EOL
 
 RUN apt-get purge -y lsb-release gnupg2 curl && \
@@ -748,8 +807,8 @@ RUN cat > /etc/haproxy/haproxy.cfg <<EOL
 global
     log stdout format raw local0
     maxconn 4096
-    user haproxy
-    group haproxy
+    #user haproxy
+    #group haproxy
 
 defaults
     log global
