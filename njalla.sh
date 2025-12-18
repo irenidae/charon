@@ -7,7 +7,7 @@ info() { printf "[info] %s\n" "$*"; }
 warn() { printf "[warn] %s\n" "$*"; }
 err()  { printf "[error] %s\n" "$*" >&2; }
 die()  { err "$*"; exit 1; }
-wipe() { command clear 2>/dev/null || true; printf '\e[3J' 2>/dev/null || true; }
+wipe() { clear 2>/dev/null || true; printf '\e[3J' 2>/dev/null || true; }
 
 if [[ "$(id -u)" -eq 0 ]]; then
     err "This script must be run as a regular user (not root)."
