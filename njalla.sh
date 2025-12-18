@@ -7,7 +7,7 @@ info() { printf "[info] %s\n" "$*"; }
 warn() { printf "[warn] %s\n" "$*"; }
 err()  { printf "[error] %s\n" "$*" >&2; }
 die()  { err "$*"; exit 1; }
-clear_scr() { clear 2>/dev/null || true; printf '\e[3J' 2>/dev/null || true; }
+wipe() { command clear 2>/dev/null || true; printf '\e[3J' 2>/dev/null || true; }
 
 if [[ "$(id -u)" -eq 0 ]]; then
     err "This script must be run as a regular user (not root)."
@@ -25,7 +25,7 @@ DOCKER_OK=0
 require_docker_access() {
     if [[ "$OSTYPE" == "darwin"* ]]; then
         if ! command -v docker >/dev/null 2>&1; then
-            clear_scr
+            wipe
             err "Docker is not installed."
             info "hint: Install Docker Desktop, launch it, then re-run this script."
             exit 1
@@ -35,7 +35,7 @@ require_docker_access() {
             local sock
             sock="${DOCKER_HOST#unix://}"
             if [[ ! -S "$sock" ]]; then
-                clear_scr
+                wipe
                 err  "DOCKER_HOST points to '$sock', but that socket does not exist."
                 info "hint: Start Docker Desktop, or run: unset DOCKER_HOST ; docker context use default"
                 exit 1
@@ -43,7 +43,7 @@ require_docker_access() {
         fi
 
         if ! docker info >/dev/null 2>&1; then
-            clear_scr
+            wipe
             err  "Docker is installed but not running."
             info "hint: Open 'Docker.app' and wait until the whale icon stops animating, then re-run this script."
             info "hint: If you use custom contexts, try: unset DOCKER_HOST ; docker context use default"
@@ -55,7 +55,7 @@ require_docker_access() {
     fi
 
     if ! command -v docker >/dev/null 2>&1; then
-        clear_scr
+        wipe
         err "Docker is not installed."
         info "hint: install docker, then re-run this script."
         exit 1
@@ -64,11 +64,11 @@ require_docker_access() {
     local cur_user
     cur_user="${USER:-$(id -un 2>/dev/null || true)}"
     [[ -n "$cur_user" ]] || cur_user="$(whoami 2>/dev/null || true)"
-    [[ -n "$cur_user" ]] || { clear_scr; err "Unable to determine current user."; exit 1; }
+    [[ -n "$cur_user" ]] || { wipe; err "Unable to determine current user."; exit 1; }
 
     # Linux: require docker group membership; do not call docker if not in group.
     if ! id -nG "$cur_user" | tr ' ' '\n' | grep -qx docker; then
-        clear_scr
+        wipe
         err "Your user is not in the 'docker' group."
         info "Please add your user to the docker group to run docker without sudo (and avoid root-owned bind mounts)."
         echo
@@ -82,7 +82,7 @@ require_docker_access() {
     fi
 
     if ! docker info >/dev/null 2>&1; then
-        clear_scr
+        wipe
         err "Docker is installed but not accessible without sudo."
         info "hint: start docker daemon (systemd): sudo systemctl enable --now docker"
         info "hint: if you just added yourself to the docker group, re-login or run: newgrp docker"
@@ -301,7 +301,7 @@ cleanup_all() {
 }
 
 on_host_sigint() {
-    clear_scr
+    wipe
     echo
     warn "Interrupted by Ctrl+C. Cleaning up..."
     cleanup_all
@@ -1297,7 +1297,7 @@ main() {
     if [ -t 1 ]; then
         tty_flag="-it"
     fi
-    clear_scr
+    wipe
     docker exec $tty_flag njalla /bin/bash -lc 'exec ./njalla'
 }
 
