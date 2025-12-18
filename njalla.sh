@@ -930,34 +930,36 @@ validate_api_token() {
 prompt_for_api_token() {
     local attempts=0
     local max_attempts=3
+    local rc=0
 
-    while (( attempts < max_attempts )); do
-        read -r -p "Enter your API Token: " nj_api_token || return 1
+    while :; do
+        read -r -p "Enter your API Token: " nj_api_token || continue
 
         if ! validate_api_token; then
             echo "Invalid API Token format. Please try again."
-            (( attempts++ ))
-            continue
+            attempts=$((attempts + 1))
+        else
+            # Validate token against API (not only format), so script doesn't exit later.
+            if send_request "list-domains" "{}" >/dev/null 2>&1; then
+                echo "API Token accepted."
+                return 0
+            else
+                rc=$?
+                if (( rc == 2 )); then
+                    echo "Invalid API Token. Please try again."
+                    attempts=$((attempts + 1))
+                else
+                    echo "API request failed. Please check connectivity and try again."
+                    attempts=$((attempts + 1))
+                fi
+            fi
         fi
 
-        # Validate token against API (not only format), so script doesn't "crash" later.
-        if send_request "list-domains" "{}" >/dev/null 2>&1; then
-            echo "API Token accepted."
-            return 0
-        else
-            rc=$?
-            if (( rc == 2 )); then
-                echo "Invalid API Token. Please try again."
-            else
-                echo "API request failed. Please check connectivity and try again."
-            fi
-            (( attempts++ ))
-            continue
+        if (( attempts >= max_attempts )); then
+            echo "Too many attempts. Try again, or press Ctrl+C to exit."
+            attempts=0
         fi
     done
-
-    echo "You have reached the maximum number of attempts."
-    return 1
 }
 user_confirm() {
     local prompt="$1"
