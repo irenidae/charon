@@ -927,8 +927,11 @@ prompt_for_api_token() {
     local rc=0
 
     while :; do
+        clear_screen
+
         read -r -p "Enter your Njalla API Token: " nj_api_token || continue
 
+        clear_screen
         validate_api_token
         rc=$?
 
@@ -955,8 +958,12 @@ prompt_for_api_token() {
         fi
 
         if (( attempts >= max_attempts )); then
+            clear_screen
             echo "Too many attempts. Try again, or press Ctrl+C to exit."
             attempts=0
+            sleep 1
+        else
+            sleep 1
         fi
     done
 }
