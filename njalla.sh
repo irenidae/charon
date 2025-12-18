@@ -300,6 +300,14 @@ cleanup_all() {
     set -e
 }
 
+on_host_sigint() {
+    clear_scr
+    echo
+    warn "Interrupted by Ctrl+C. Cleaning up..."
+    cleanup_all
+    exit 130
+}
+
 check_pkg() {
     local os=""
 
@@ -811,35 +819,29 @@ clear_screen() {
     printf '\e[3J' 2>/dev/null || true
 }
 
-cleanup() {
+restore_tty() {
     tput cnorm 2>/dev/null || true
     if [[ "${tty_is_tty}" -eq 1 ]]; then
         [[ -n "${__orig_stty:-}" ]] && stty "${__orig_stty}" 2>/dev/null || true
     fi
-    clear_screen
 }
 
-safe_fmt_date() {
-    local _in="${1:-}"
-    local _fmt="${2:-+%d.%m.%Y}"
-    date -d "$_in" "$_fmt" 2>/dev/null || echo "$_in"
+cleanup() {
+    restore_tty
 }
 
 on_sigint() {
-    if [[ "${tty_is_tty}" -eq 1 ]]; then
-        printf '\e[2J\e[3J\e[H'
-        echo "Interrupted by Ctrl+C. Exiting..."
-        cleanup
-    fi
+    clear_screen
+    restore_tty
+    echo
+    echo "Interrupted by Ctrl+C. Exiting..."
     exit 130
 }
 
 on_sigterm() {
-    if [[ "${tty_is_tty}" -eq 1 ]]; then
-        printf '\e[2J\e[3J\e[H'
-        echo "Received SIGTERM. Exiting..."
-        cleanup
-    fi
+    restore_tty
+    echo
+    echo "Received SIGTERM. Exiting..."
     exit 143
 }
 
@@ -1280,7 +1282,7 @@ main() {
     tmp_folder="$(mktemp -d -t njallastack.XXXXXXXX)"
     append_tmp_dir "$tmp_folder"
     rnd_proj_name="njallastack_$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | head -c 8 || true)"
-    trap 'cleanup_all; exit 130' INT
+    trap on_host_sigint INT
     trap 'cleanup_all' EXIT TERM HUP QUIT
     check_pkg
     require_docker_access
