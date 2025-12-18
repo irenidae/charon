@@ -879,17 +879,25 @@ send_request() {
     until (( i++ >= 3 )) || $success; do
         delay
 
-        response="$(curl -sf --proxy "socks5h://${int_network_container_haproxy_ipv4}:9095" -H "Authorization: Njalla $nj_api_token" -H "Content-Type: application/json" -d "$json_string" -X POST "$api_url")" || response=""
+        response="$(
+            curl -sf \
+                --proxy "socks5h://${int_network_container_haproxy_ipv4}:9095" \
+                -H "Authorization: Njalla $nj_api_token" \
+                -H "Content-Type: application/json" \
+                -d "$json_string" \
+                -X POST "$api_url" \
+            || true
+        )"
 
         processed_response="$(
             jq -er 'if .error then .error.message else .result end' \
                 <<<"$response" 2>/dev/null || true
         )"
 
-        [[ "$processed_response" == *"Permission denied"* ]] && {
-            echo "Error: $processed_response" >&2
-            return 1
-        }
+        if [[ "$processed_response" == *"Permission denied"* ]]; then
+            echo "Invalid API Token." >&2
+            return 2
+        fi
 
         if [[ -n "$processed_response" ]]; then
             success=true
@@ -926,12 +934,25 @@ prompt_for_api_token() {
     while (( attempts < max_attempts )); do
         read -r -p "Enter your API Token: " nj_api_token || return 1
 
-        if validate_api_token; then
+        if ! validate_api_token; then
+            echo "Invalid API Token format. Please try again."
+            (( attempts++ ))
+            continue
+        fi
+
+        # Validate token against API (not only format), so script doesn't "crash" later.
+        if send_request "list-domains" "{}" >/dev/null 2>&1; then
             echo "API Token accepted."
             return 0
         else
-            echo "Invalid API Token. Please try again."
+            rc=$?
+            if (( rc == 2 )); then
+                echo "Invalid API Token. Please try again."
+            else
+                echo "API request failed. Please check connectivity and try again."
+            fi
             (( attempts++ ))
+            continue
         fi
     done
 
