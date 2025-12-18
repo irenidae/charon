@@ -867,6 +867,7 @@ delay() {
 send_request() {
     local method=$1
     local params_json=$2
+    local quiet="${3:-0}"
 
     local json_string
     json_string="{\"jsonrpc\": \"2.0\", \"method\": \"$method\", \"params\": $params_json, \"id\": 1}"
@@ -875,7 +876,7 @@ send_request() {
     local response=""
     local processed_response=""
 
-    until (( i++ >= 3 )); do
+    for ((i=0; i<3; i++)); do
         delay
 
         response="$(
@@ -893,22 +894,26 @@ send_request() {
                 <<<"$response" 2>/dev/null || true
         )"
 
-        [[ -z "$processed_response" ]] && continue
-
         if [[ "$processed_response" == *"Permission denied"* ]]; then
             return 2
         fi
 
-        echo "$processed_response"
-        return 0
+        if [[ -n "$processed_response" ]]; then
+            echo "$processed_response"
+            return 0
+        fi
     done
 
+    if [[ "$quiet" != "1" ]]; then
+        echo "Failed to complete request after 3 attempts." >&2
+    fi
     return 1
 }
+
 validate_api_token() {
     local token_body="$nj_api_token"
 
-    if [[ -n "$expected_prefix" ]]; then
+    if [[ -n "${expected_prefix:-}" ]]; then
         if [[ "$nj_api_token" != "$expected_prefix"* ]]; then
             return 10
         fi
@@ -921,6 +926,7 @@ validate_api_token() {
 
     return 0
 }
+
 prompt_for_api_token() {
     local attempts=0
     local max_attempts=3
@@ -930,12 +936,13 @@ prompt_for_api_token() {
         clear_screen
 
         read -r -p "Enter your Njalla API Token: " nj_api_token || continue
+        nj_api_token="${nj_api_token//$'\r'/}"
+        nj_api_token="${nj_api_token//$'\n'/}"
+        nj_api_token="${nj_api_token//[[:space:]]/}"
 
-        clear_screen
-        validate_api_token
-        rc=$?
-
-        if (( rc != 0 )); then
+        if ! validate_api_token; then
+            rc=$?
+            clear_screen
             if (( rc == 10 )); then
                 echo "Invalid Njalla API Token: expected prefix '$expected_prefix'."
             else
@@ -943,11 +950,13 @@ prompt_for_api_token() {
             fi
             attempts=$((attempts + 1))
         else
-            if send_request "list-domains" "{}" >/dev/null 2>&1; then
+            if send_request "list-domains" "{}" 1 >/dev/null 2>&1; then
+                clear_screen
                 echo "Njalla API Token accepted."
                 return 0
             else
                 rc=$?
+                clear_screen
                 if (( rc == 2 )); then
                     echo "Invalid Njalla API Token. Please try again."
                 else
