@@ -874,9 +874,8 @@ send_request() {
     local i=0
     local response=""
     local processed_response=""
-    local success=false
 
-    until (( i++ >= 3 )) || $success; do
+    until (( i++ >= 3 )); do
         delay
 
         response="$(
@@ -894,19 +893,16 @@ send_request() {
                 <<<"$response" 2>/dev/null || true
         )"
 
+        [[ -z "$processed_response" ]] && continue
+
         if [[ "$processed_response" == *"Permission denied"* ]]; then
-            echo "Invalid API Token." >&2
             return 2
         fi
 
-        if [[ -n "$processed_response" ]]; then
-            success=true
-            echo "$processed_response"
-            return 0
-        fi
+        echo "$processed_response"
+        return 0
     done
 
-    echo "Failed to complete request after 3 attempts." >&2
     return 1
 }
 validate_api_token() {
@@ -914,15 +910,13 @@ validate_api_token() {
 
     if [[ -n "$expected_prefix" ]]; then
         if [[ "$nj_api_token" != "$expected_prefix"* ]]; then
-            echo "Invalid API Token: expected prefix '$expected_prefix'."
-            return 1
+            return 10
         fi
         token_body="${nj_api_token#"$expected_prefix"}"
     fi
 
     if [[ ! "$token_body" =~ ^[0-9a-z]{40}$ ]]; then
-        echo "Invalid API Token: must be 40 lowercase alphanumeric characters${expected_prefix:+ after the prefix}."
-        return 1
+        return 11
     fi
 
     return 0
@@ -933,25 +927,30 @@ prompt_for_api_token() {
     local rc=0
 
     while :; do
-        read -r -p "Enter your API Token: " nj_api_token || continue
+        read -r -p "Enter your Njalla API Token: " nj_api_token || continue
 
-        if ! validate_api_token; then
-            echo "Invalid API Token format. Please try again."
+        validate_api_token
+        rc=$?
+
+        if (( rc != 0 )); then
+            if (( rc == 10 )); then
+                echo "Invalid Njalla API Token: expected prefix '$expected_prefix'."
+            else
+                echo "Invalid Njalla API Token: must be 40 lowercase alphanumeric characters${expected_prefix:+ after the prefix}."
+            fi
             attempts=$((attempts + 1))
         else
-            # Validate token against API (not only format), so script doesn't exit later.
             if send_request "list-domains" "{}" >/dev/null 2>&1; then
-                echo "API Token accepted."
+                echo "Njalla API Token accepted."
                 return 0
             else
                 rc=$?
                 if (( rc == 2 )); then
-                    echo "Invalid API Token. Please try again."
-                    attempts=$((attempts + 1))
+                    echo "Invalid Njalla API Token. Please try again."
                 else
-                    echo "API request failed. Please check connectivity and try again."
-                    attempts=$((attempts + 1))
+                    echo "Njalla API request failed. Please check connectivity and try again."
                 fi
+                attempts=$((attempts + 1))
             fi
         fi
 
