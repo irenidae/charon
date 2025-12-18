@@ -945,8 +945,10 @@ prompt_for_api_token() {
             clear_screen
             if (( rc == 10 )); then
                 echo "Invalid Njalla API Token: expected prefix '$expected_prefix'."
+                sleep 1.5
             else
                 echo "Invalid Njalla API Token: must be 40 lowercase alphanumeric characters${expected_prefix:+ after the prefix}."
+                sleep 1.5
             fi
             attempts=$((attempts + 1))
         else
@@ -959,8 +961,10 @@ prompt_for_api_token() {
                 clear_screen
                 if (( rc == 2 )); then
                     echo "Invalid Njalla API Token. Please try again."
+                    sleep 1.5
                 else
                     echo "Njalla API request failed. Please check connectivity and try again."
+                    sleep 1.5                    
                 fi
                 attempts=$((attempts + 1))
             fi
