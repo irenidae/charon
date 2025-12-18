@@ -805,10 +805,12 @@ if [[ -t 1 ]]; then
     __orig_stty="$(stty -g 2>/dev/null || true)"
     stty -echoctl 2>/dev/null || true
 fi
-clear_screen() { 
+
+clear_screen() {
     clear 2>/dev/null || true
     printf '\e[3J' 2>/dev/null || true
 }
+
 cleanup() {
     tput cnorm 2>/dev/null || true
     if [[ "${tty_is_tty}" -eq 1 ]]; then
@@ -816,20 +818,28 @@ cleanup() {
     fi
     clear_screen
 }
+
+safe_fmt_date() {
+    local _in="${1:-}"
+    local _fmt="${2:-+%d.%m.%Y}"
+    date -d "$_in" "$_fmt" 2>/dev/null || echo "$_in"
+}
+
 on_sigint() {
-    if [[ -t 1 ]]; then
+    if [[ "${tty_is_tty}" -eq 1 ]]; then
         printf '\e[2J\e[3J\e[H'
+        echo "Interrupted by Ctrl+C. Exiting..."
+        cleanup
     fi
-    echo "Interrupted by Ctrl+C. Exiting..."
-    cleanup
     exit 130
 }
+
 on_sigterm() {
-    if [[ -t 1 ]]; then
+    if [[ "${tty_is_tty}" -eq 1 ]]; then
         printf '\e[2J\e[3J\e[H'
+        echo "Received SIGTERM. Exiting..."
+        cleanup
     fi
-    echo "Received SIGTERM. Exiting..."
-    cleanup
     exit 143
 }
 
