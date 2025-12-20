@@ -110,7 +110,6 @@ __compose() {
         return 1
     fi
 }
-
 prune_build_caches() {
     docker builder prune -af >/dev/null 2>&1 || true
     docker image prune -f >/dev/null 2>&1 || true
@@ -131,7 +130,6 @@ prune_build_caches() {
         fi
     fi
 }
-
 preclean_patterns() {
     for name in exit_a exit_b haproxy njalla; do
         docker ps -aq -f "name=^${name}$" | xargs -r docker rm -f >/dev/null 2>&1 || true
@@ -153,7 +151,6 @@ preclean_patterns() {
 
     prune_build_caches
 }
-
 cleanup_project() {
     local proj="$1"
     local yml="$2"
@@ -173,7 +170,6 @@ cleanup_project() {
         docker rmi -f debian:trixie-slim >/dev/null 2>&1 || true
     fi
 }
-
 start_session_guard() {
     local proj="$1"
     local yml="$2"
@@ -184,7 +180,7 @@ start_session_guard() {
     local guard="${tmp_folder}/${proj}/._guard.sh"
     local pidfile="${tmp_folder}/${proj}/._guard.pid"
 
-    cat >"$guard" <<'EOS'
+    cat >"$guard" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
@@ -229,7 +225,7 @@ while :; do
 done
 
 on_term
-EOS
+EOF
 
     chmod +x "$guard"
 
@@ -247,7 +243,6 @@ EOS
 
     guard_pid="$(cat "$pidfile" 2>/dev/null || true)"
 }
-
 stop_session_guard() {
     local pid="${guard_pid:-}"
 
@@ -267,7 +262,6 @@ stop_session_guard() {
     kill -KILL "$pid" 2>/dev/null || true
     unset guard_pid
 }
-
 cleanup_all() {
     set +e
 
@@ -299,7 +293,6 @@ cleanup_all() {
     rm -rf -- "${tmp_folder:-}" 2>/dev/null || true
     set -e
 }
-
 on_host_sigint() {
     wipe
     echo
@@ -307,7 +300,6 @@ on_host_sigint() {
     cleanup_all
     exit 130
 }
-
 check_pkg() {
     local os=""
 
@@ -353,7 +345,6 @@ check_pkg() {
         sudo systemctl enable --now docker 2>/dev/null || true
     fi
 }
-
 wait_health() {
     local name="$1" timeout="${2:-420}" id hs run i
     for ((i=0; i<timeout; i++)); do
@@ -369,14 +360,12 @@ wait_health() {
     done
     return 1
 }
-
 print_health_log() {
     local name="$1" id
     id="$(docker ps -a --filter "name=^${name}$" --format '{{.ID}}' | head -n1)"
     [[ -n "$id" ]] || return 0
     docker inspect -f '{{range .State.Health.Log}}{{printf "[%s] code=%d %s\n" .Start .ExitCode .Output}}{{end}}' "$id" 1>&2 || true
 }
-
 wait_stack_ready() {
     info "Waiting for exit_a health"
     if ! wait_health exit_a 420; then
@@ -401,7 +390,6 @@ wait_stack_ready() {
 
     info "All proxy containers are healthy."
 }
-
 run_build_proxy() {
     local proj_dir="${tmp_folder}/${rnd_proj_name}"
     mkdir -p "${tmp_folder}/${rnd_proj_name}"/{exit,haproxy,njalla}
@@ -434,7 +422,6 @@ services:
     stop_signal: SIGTERM
     stop_grace_period: 5s
     cap_drop: ["ALL"]
-    #cap_add: ["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE"]
     read_only: true
     tmpfs:
       - /tmp:rw,nosuid,nodev,noexec,mode=1777
@@ -469,7 +456,6 @@ services:
     stop_signal: SIGTERM
     stop_grace_period: 5s
     cap_drop: ["ALL"]
-    #cap_add: ["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE"]
     read_only: true
     tmpfs:
       - /tmp:rw,nosuid,nodev,noexec,mode=1777
@@ -508,7 +494,6 @@ services:
     init: true
     stop_signal: SIGTERM
     stop_grace_period: 2s
-    user: "haproxy:haproxy"
     cap_drop: ["ALL"]
     read_only: true
     pids_limit: 100
@@ -629,7 +614,7 @@ RUN install -d -m 0755 -o root -g root /usr/share/keyrings && \
     printf '%b' "Types: deb deb-src\nURIs: https://deb.torproject.org/torproject.org\nSuites: $(lsb_release -cs)\nComponents: main\nArchitectures: amd64\nSigned-By: /usr/share/keyrings/deb.torproject.org-keyring.gpg\n" > /etc/apt/sources.list.d/tor.sources && \
     arch="$(dpkg --print-architecture)"; \
     if [ "$arch" = "amd64" ]; then \
-        printf '%b' "Package: tor tor-geoipdb tor-dbgsym nyx deb.torproject.org-keyring\nPin: origin deb.torproject.org\nPin-Priority: 990\n" > /etc/apt/preferences.d/99-torproject; \
+        printf '%b' "Package: tor tor-geoipdb deb.torproject.org-keyring\nPin: origin deb.torproject.org\nPin-Priority: 990\n" > /etc/apt/preferences.d/99-torproject; \
     else \
         printf '%b' "# no torproject pin on non-amd64\n" > /etc/apt/preferences.d/99-torproject; \
     fi && \
@@ -639,18 +624,22 @@ RUN install -d -m 0755 -o root -g root /usr/share/keyrings && \
     apt-get install --no-install-recommends -y tor deb.torproject.org-keyring nyx vanguards
 
 COPY --from=build /out/ /tmp/torbuild/
-RUN if ls /tmp/torbuild/*.deb >/dev/null 2>&1; then \
-        apt-get update -qq && \
-        apt-get install -y --no-install-recommends /tmp/torbuild/*.deb && \
-        rm -rf /tmp/torbuild; \
-    fi
+RUN set -Eeuo pipefail; \
+    if ls /tmp/torbuild/*.deb >/dev/null 2>&1; then \
+        apt-get update -qq; \
+        apt-get install -y --no-install-recommends /tmp/torbuild/*.deb; \
+    fi; \
+    apt-get update -qq; \
+    apt-get install -y --no-install-recommends tor-geoipdb; \
+    rm -rf /tmp/torbuild; \
+    rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /run/tor /var/lib/tor /usr/local/bin && \
     chown -R debian-tor:debian-tor /run/tor /var/lib/tor && \
     chmod 750 /run/tor && \
     chmod 700 /var/lib/tor
 
-RUN cat > /etc/tor/vanguards.conf <<EOL
+RUN cat > /etc/tor/vanguards.conf <<'EOS'
 [Global]
 control_socket = /run/tor/control.sock
 control_cookie = /run/tor/control.authcookie
@@ -688,9 +677,9 @@ rend_use_close_circuits_on_overuse = True
 rend_use_global_start_count = 1000
 rend_use_relay_start_count = 100
 rend_use_scale_at_count = 20000
-EOL
+EOS
 
-RUN install -m 0755 -o root -g root /dev/stdin /usr/local/bin/healthcheck <<'EOL'
+RUN install -m 0755 -o root -g root /dev/stdin /usr/local/bin/healthcheck <<'EOS'
 #!/bin/bash
 set -Eeuo pipefail
 [ -S /run/tor/control.sock ] || exit 1
@@ -700,9 +689,9 @@ printf "AUTHENTICATE $cookie\r\ngetinfo status/bootstrap-phase\r\nquit\r\n" | nc
 printf "AUTHENTICATE $cookie\r\ngetinfo circuit-status\r\nquit\r\n" | nc -U /run/tor/control.sock | grep -q 'BUILT' || exit 1
 ps aux | grep '[v]anguards' > /dev/null || exit 1
 exit 0
-EOL
+EOS
 
-RUN install -m 0755 -o root -g root /dev/stdin /usr/local/bin/entrypoint-docker.sh <<'EOL'
+RUN install -m 0755 -o root -g root /dev/stdin /usr/local/bin/entrypoint-docker.sh <<'EOS'
 #!/bin/bash
 set -Eeuo pipefail
 
@@ -755,13 +744,13 @@ shutdown() {
 trap shutdown TERM INT
 
 for _ in $(seq 1 240); do
-  kill -0 "$tor_pid" 2>/dev/null || exit 1
-  if [ -S /run/tor/control.sock ] && [ -r /run/tor/control.authcookie ]; then
-    cookie="$(xxd -p /run/tor/control.authcookie | tr -d '\n')"
-    resp="$(printf "AUTHENTICATE %s\r\ngetinfo status/bootstrap-phase\r\nquit\r\n" "$cookie" | nc -U /run/tor/control.sock -w 5 -q 1 || true)"
-    echo "$resp" | grep -q 'PROGRESS=100' && break
-  fi
-  sleep 1
+    kill -0 "$tor_pid" 2>/dev/null || exit 1
+    if [ -S /run/tor/control.sock ] && [ -r /run/tor/control.authcookie ]; then
+        cookie="$(xxd -p /run/tor/control.authcookie | tr -d '\n')"
+        resp="$(printf "AUTHENTICATE %s\r\ngetinfo status/bootstrap-phase\r\nquit\r\n" "$cookie" | nc -U /run/tor/control.sock -w 5 -q 1 || true)"
+        echo "$resp" | grep -q 'PROGRESS=100' && break
+    fi
+    sleep 1
 done
 
 if ! ( [ -S /run/tor/control.sock ] && [ -r /run/tor/control.authcookie ] ); then
@@ -772,7 +761,7 @@ vanguards --config /etc/tor/vanguards.conf &
 vg_pid=$!
 wait -n "$tor_pid" "$vg_pid" || true
 shutdown
-EOL
+EOS
 
 RUN apt-get purge -y lsb-release gnupg2 curl && \
     apt-get autoremove -y && \
@@ -803,12 +792,12 @@ RUN apt-get update && \
     ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
     dpkg-reconfigure -f noninteractive tzdata
 
-RUN cat > /etc/haproxy/haproxy.cfg <<EOL
+RUN cat > /etc/haproxy/haproxy.cfg <<EOS
 global
     log stdout format raw local0
     maxconn 4096
-    #user haproxy
-    #group haproxy
+    user haproxy
+    group haproxy
 
 defaults
     log global
@@ -833,12 +822,13 @@ backend socks_pool
 
     server exit_a ${int_network_container_exit_a_ipv4}:9095 check inter 20s rise 1 fall 2
     server exit_b ${int_network_container_exit_b_ipv4}:9095 check inter 20s rise 1 fall 2
-EOL
+EOS
 
 RUN apt-get autoremove -y && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+USER haproxy:haproxy
 CMD ["haproxy","-f","/etc/haproxy/haproxy.cfg","-db"]
 EOF
 
@@ -862,7 +852,7 @@ RUN groupadd -g 101 user && \
     useradd -u 1000 -g 101 -r -M -s /usr/sbin/nologin user && \
     mkdir -p /opt/njalla
     
-RUN cat > /opt/njalla/njalla <<'EOL'
+RUN cat > /opt/njalla/njalla <<'EOS'
 #!/bin/bash
 set -Eeuo pipefail
 
@@ -1310,7 +1300,7 @@ prompt_for_api_token
 domain_info
 tor_newnym
 add_a_records
-EOL
+EOS
 
 RUN chown -R 1000:101 /opt/njalla && \
     chmod +x /opt/njalla/njalla
@@ -1320,7 +1310,6 @@ WORKDIR /opt/njalla
 CMD ["sleep","infinity"]
 EOF
 }
-
 main() {
     ext_network_container_subnet_cidr_ipv4="10.16.85.0/29"
     ext_base=${ext_network_container_subnet_cidr_ipv4%/*}
