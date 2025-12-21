@@ -327,10 +327,14 @@ check_pkg() {
                 sudo sh -c "printf 'Package: *\nPin: origin download.docker.com\nPin-Priority: 900\n' > /etc/apt/preferences.d/docker"
                 sudo apt-get update >/dev/null 2>&1
                 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin >/dev/null 2>&1
+                sudo groupadd docker 2>/dev/null || true
+                sudo usermod -aG docker $USER
                 ;;
             arch|manjaro)
                 [[ "${QUIET_CHECK_PKG:-0}" == "1" ]] || info "installing docker (Arch/Manjaro)…"
                 sudo pacman -Sy --needed --noconfirm docker docker-compose >/dev/null 2>&1
+                sudo groupadd docker 2>/dev/null || true
+                sudo usermod -aG docker $USER
                 ;;
             *)
                 warn "unsupported distro '$os' – install docker manually."
